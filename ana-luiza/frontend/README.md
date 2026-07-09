@@ -44,6 +44,15 @@ uvicorn app.main:app --reload
 Swagger: http://localhost:8000/docs
 ReDoc: http://localhost:8000/redoc
 
+## Painel de recomendação
+
+No detalhe da disciplina, informe opcionalmente:
+
+- objetivo da semana;
+- conteúdos pendentes com título, dificuldade e status.
+
+Depois clique em `Gerar recomendação de estudo`. O backend funciona sem `GOOGLE_API_KEY` usando fallback por regras. Quando fallback for usado, o painel mostra um aviso. A recomendação é uma simulação e não substitui o resultado oficial do SIGAA.
+
 ## Fluxo de demonstração
 
 1. Abrir a Home e verificar o status da API.

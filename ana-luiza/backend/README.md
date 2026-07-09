@@ -41,6 +41,43 @@ Com a API rodando localmente, acesse:
 - ReDoc: http://localhost:8000/redoc
 - OpenAPI JSON: http://localhost:8000/openapi.json
 
+## Agente de recomendação de estudos
+
+O backend expõe o endpoint:
+
+- `POST /api/agent/study-recommendation`
+
+A recomendação usa a simulação determinística de nota, menção e frequência como contexto. O agente não recalcula livremente esses valores.
+
+Variáveis LLM previstas em `.env.example`:
+
+```bash
+LLM_PROVIDER=google
+GOOGLE_API_KEY=
+LLM_MODEL=gemini-2.5-flash
+LLM_TIMEOUT_SECONDS=8
+LLM_FALLBACK_ENABLED=true
+```
+
+O sistema funciona sem `GOOGLE_API_KEY`: quando a chave não existe, quando o provedor falha, quando há timeout ou quando a resposta do LLM é inválida, o backend usa fallback determinístico por regras. Não commite `.env` real.
+
+Exemplo de request:
+
+```bash
+curl -X POST http://localhost:8000/api/agent/study-recommendation \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "discipline_id": "uuid-da-disciplina",
+    "target_average": 5.0,
+    "pending_topics": [
+      {"title":"GQM","difficulty":"medium","status":"not_started"}
+    ],
+    "user_goal": "quero me organizar para a próxima semana"
+  }'
+```
+
+Consulte também o Swagger: http://localhost:8000/docs
+
 ## Rodar testes
 
 ```bash

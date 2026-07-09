@@ -9,7 +9,7 @@
 
 body { margin: 0; min-width: 320px; }
 
-button, input, a { font: inherit; }
+button, input, select, a { font: inherit; }
 
 button, .hero-actions a, .topbar a {
   border: 1px solid #1f5eff;
@@ -28,7 +28,7 @@ button, .hero-actions a, .topbar a {
 button:hover, .hero-actions a:hover, .topbar a:hover { background: #1747bd; }
 button:disabled { cursor: not-allowed; opacity: 0.65; }
 
-input {
+input, select {
   width: 100%;
   border: 1px solid #cbd2df;
   border-radius: 6px;
@@ -92,6 +92,7 @@ h3 { font-size: 1rem; }
 .message { padding: 0.8rem 1rem; border-radius: 6px; border: 1px solid #d9e2ef; background: #fff; }
 .message.error { border-color: #f0b4b4; background: #fff1f1; color: #9b1c1c; }
 .message.success { border-color: #a6d7b8; background: #edf9f1; color: #17643a; }
+.message.warning { border-color: #f2d58a; background: #fff8e6; color: #7a4f00; }
 .message.muted { color: #667085; }
 
 .api-status { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; padding: 0.85rem 1rem; border: 1px solid #dde3ec; border-radius: 8px; background: #fff; width: fit-content; }
@@ -125,6 +126,7 @@ dd { margin: 0; font-weight: 700; }
 ul { padding-left: 1.2rem; }
 
 @media (max-width: 860px) {
+  .topic-form { grid-template-columns: 1fr; }
   .two-column, .detail-grid { grid-template-columns: 1fr; }
   .discipline-summary dl, .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .target-panel { align-items: stretch; flex-direction: column; }
@@ -136,3 +138,13 @@ ul { padding-left: 1.2rem; }
   .discipline-summary dl, .metrics-grid { grid-template-columns: 1fr; }
   .hero-actions { flex-direction: column; }
 }
+
+
+.topic-form { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(120px, 0.7fr) minmax(140px, 0.8fr) auto; gap: 0.75rem; align-items: end; }
+.topic-list { display: grid; gap: 0.6rem; }
+.topic-item { display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; border: 1px solid #dde3ec; border-radius: 6px; padding: 0.75rem; background: #f9fafb; }
+.topic-item span { display: block; color: #667085; font-size: 0.85rem; }
+.topic-item button { background: #fff; color: #1f5eff; min-height: 34px; padding: 0.35rem 0.65rem; }
+.recommendation-controls { display: grid; gap: 0.9rem; }
+.recommendation-content { display: grid; gap: 1rem; }
+.recommendation-panel h3 { margin-bottom: 0.4rem; }

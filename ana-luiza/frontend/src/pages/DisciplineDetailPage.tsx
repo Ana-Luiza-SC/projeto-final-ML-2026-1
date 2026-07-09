@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { createAssessment, getAcademicSimulation, getDiscipline, updateAttendance } from "../api/client";
+import { createAssessment, createStudyRecommendation, getAcademicSimulation, getDiscipline, updateAttendance } from "../api/client";
 import { AcademicSimulationPanel } from "../components/AcademicSimulationPanel";
 import { AssessmentForm } from "../components/AssessmentForm";
 import { AttendanceForm } from "../components/AttendanceForm";
-import type { AcademicSimulation, AssessmentPayload, AttendancePayload, Discipline } from "../types";
+import { PendingTopicsForm } from "../components/PendingTopicsForm";
+import { StudyRecommendationPanel } from "../components/StudyRecommendationPanel";
+import type { AcademicSimulation, AssessmentPayload, AttendancePayload, Discipline, StudyRecommendationResponse, StudyTopicInput } from "../types";
 
 type Props = {
   disciplineId: string;
@@ -13,13 +15,18 @@ type Props = {
 export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
   const [discipline, setDiscipline] = useState<Discipline | null>(null);
   const [simulation, setSimulation] = useState<AcademicSimulation | null>(null);
+  const [recommendation, setRecommendation] = useState<StudyRecommendationResponse | null>(null);
+  const [pendingTopics, setPendingTopics] = useState<StudyTopicInput[]>([]);
+  const [userGoal, setUserGoal] = useState("");
   const [targetAverage, setTargetAverage] = useState("5.0");
   const [loadingDiscipline, setLoadingDiscipline] = useState(true);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [loadingAssessment, setLoadingAssessment] = useState(false);
   const [loadingSimulation, setLoadingSimulation] = useState(false);
+  const [loadingRecommendation, setLoadingRecommendation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [simulationError, setSimulationError] = useState<string | null>(null);
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   async function loadDiscipline() {
@@ -73,6 +80,32 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
       setError(err instanceof Error ? err.message : "Não foi possível atualizar frequência.");
     } finally {
       setLoadingAttendance(false);
+    }
+  }
+
+
+
+  async function handleRecommendation() {
+    setLoadingRecommendation(true);
+    setRecommendationError(null);
+    const parsedTarget = Number(targetAverage);
+    if (!Number.isFinite(parsedTarget) || parsedTarget < 0 || parsedTarget > 10) {
+      setRecommendationError("Média alvo deve estar entre 0 e 10.");
+      setLoadingRecommendation(false);
+      return;
+    }
+    try {
+      const response = await createStudyRecommendation({
+        discipline_id: disciplineId,
+        target_average: parsedTarget,
+        pending_topics: pendingTopics,
+        user_goal: userGoal.trim() || null,
+      });
+      setRecommendation(response);
+    } catch (err) {
+      setRecommendationError(err instanceof Error ? err.message : "Não foi possível gerar a recomendação.");
+    } finally {
+      setLoadingRecommendation(false);
     }
   }
 
@@ -137,6 +170,7 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
         <div className="stack">
           <AttendanceForm discipline={discipline} loading={loadingAttendance} onSubmit={handleAttendance} />
           <AssessmentForm loading={loadingAssessment} onSubmit={handleAssessment} />
+          <PendingTopicsForm topics={pendingTopics} onChange={setPendingTopics} />
         </div>
         <div className="stack">
           <section className="panel target-panel">
@@ -147,6 +181,20 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
             <button type="button" onClick={loadSimulation} disabled={loadingSimulation}>{loadingSimulation ? "Consultando..." : "Consultar simulação"}</button>
           </section>
           <AcademicSimulationPanel simulation={simulation} loading={loadingSimulation} error={simulationError} />
+          <section className="panel recommendation-controls">
+            <div className="panel-heading">
+              <h2>Objetivo da semana</h2>
+              <p>Campo opcional usado pelo agente para ajustar as ações sugeridas.</p>
+            </div>
+            <label>
+              Objetivo
+              <input value={userGoal} maxLength={500} onChange={(event) => setUserGoal(event.target.value)} placeholder="quero me organizar para a próxima semana" />
+            </label>
+            <button type="button" onClick={handleRecommendation} disabled={loadingRecommendation}>
+              {loadingRecommendation ? "Gerando..." : "Gerar recomendação de estudo"}
+            </button>
+          </section>
+          <StudyRecommendationPanel recommendation={recommendation} loading={loadingRecommendation} error={recommendationError} />
         </div>
       </div>
     </div>

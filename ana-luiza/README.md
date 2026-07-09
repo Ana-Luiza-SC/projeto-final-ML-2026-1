@@ -34,6 +34,16 @@ Para apontar para outra API, crie `frontend/.env` com:
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
+## Agente de recomendação
+
+O agente usa Google/Gemini quando configurado com `GOOGLE_API_KEY`. Se a chave não existir, se o LLM falhar, se houver timeout ou se a resposta vier inválida, o backend usa fallback determinístico por regras.
+
+Crie apenas `.env.example` no repositório. Não commite `.env` real.
+
+Endpoint no Swagger:
+
+- `POST /api/agent/study-recommendation`
+
 ## Validação
 
 ```bash

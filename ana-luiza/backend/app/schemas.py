@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date as Date, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -149,6 +149,76 @@ class AcademicSimulation(BaseModel):
                     "warnings": [],
                 },
                 "warnings": [],
+            }
+        }
+    }
+
+
+TopicDifficulty = Literal["low", "medium", "high"]
+TopicStatus = Literal["not_started", "in_progress", "reviewed"]
+DedicationLevel = Literal["low", "medium", "high"]
+RecommendationProvider = Literal["google", "rules"]
+
+
+class StudyTopicInput(BaseModel):
+    title: str = Field(..., min_length=1, max_length=120)
+    difficulty: TopicDifficulty
+    status: TopicStatus
+
+
+class StudyRecommendationRequest(BaseModel):
+    discipline_id: UUID
+    target_average: float = Field(default=5.0, ge=0, le=10)
+    pending_topics: list[StudyTopicInput] = Field(default_factory=list, max_length=30)
+    user_goal: str | None = Field(default=None, max_length=500)
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "discipline_id": "00000000-0000-0000-0000-000000000000",
+                "target_average": 5.0,
+                "pending_topics": [
+                    {
+                        "title": "GQM",
+                        "difficulty": "medium",
+                        "status": "not_started",
+                    }
+                ],
+                "user_goal": "quero me organizar para a próxima semana",
+            }
+        }
+    }
+
+
+class StudyRecommendationResponse(BaseModel):
+    dedication_level: DedicationLevel
+    confidence: float = Field(..., ge=0, le=1)
+    academic_situation_summary: str
+    grade_status: str
+    attendance_status: str
+    recommended_actions: list[str] = Field(..., min_length=1)
+    reasons: list[str] = Field(..., min_length=1)
+    missing_information: list[str] = Field(default_factory=list)
+    used_fallback: bool
+    provider: RecommendationProvider
+    latency_ms: float = Field(..., ge=0)
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "dedication_level": "medium",
+                "confidence": 0.76,
+                "academic_situation_summary": "Situação simulada com menção projetada MM e frequência informada acima do mínimo.",
+                "grade_status": "A menção projetada é MM, uma menção de aprovação na UnB, mas ainda há avaliações pendentes.",
+                "attendance_status": "Frequência acima de 75%, sem risco imediato por falta.",
+                "recommended_actions": [
+                    "Revise os conteúdos ligados à próxima avaliação antes de avançar para novos tópicos."
+                ],
+                "reasons": ["A simulação indica risco por nota baixo, mas ainda há peso restante."],
+                "missing_information": [],
+                "used_fallback": True,
+                "provider": "rules",
+                "latency_ms": 12,
             }
         }
     }

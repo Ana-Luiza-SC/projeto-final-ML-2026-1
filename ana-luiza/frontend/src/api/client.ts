@@ -6,6 +6,8 @@ import type {
   AttendancePayload,
   Discipline,
   DisciplineCreatePayload,
+  StudyRecommendationRequest,
+  StudyRecommendationResponse,
 } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -90,4 +92,12 @@ export function createAssessment(id: string, payload: AssessmentPayload) {
 export function getAcademicSimulation(id: string, targetAverage: number) {
   const params = new URLSearchParams({ target_average: String(targetAverage) });
   return request<AcademicSimulation>(`/api/disciplines/${id}/academic-simulation?${params.toString()}`);
+}
+
+
+export function createStudyRecommendation(payload: StudyRecommendationRequest) {
+  return request<StudyRecommendationResponse>("/api/agent/study-recommendation", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

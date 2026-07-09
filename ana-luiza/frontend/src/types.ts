@@ -77,3 +77,35 @@ export type AcademicSimulation = {
   reasons?: string[];
   warnings?: string[];
 };
+
+
+export type TopicDifficulty = "low" | "medium" | "high";
+export type TopicStatus = "not_started" | "in_progress" | "reviewed";
+export type DedicationLevel = "low" | "medium" | "high";
+
+export type StudyTopicInput = {
+  title: string;
+  difficulty: TopicDifficulty;
+  status: TopicStatus;
+};
+
+export type StudyRecommendationRequest = {
+  discipline_id: string;
+  target_average: number;
+  pending_topics: StudyTopicInput[];
+  user_goal?: string | null;
+};
+
+export type StudyRecommendationResponse = {
+  dedication_level: DedicationLevel;
+  confidence: number;
+  academic_situation_summary: string;
+  grade_status: string;
+  attendance_status: string;
+  recommended_actions: string[];
+  reasons: string[];
+  missing_information: string[];
+  used_fallback: boolean;
+  provider: "google" | "rules";
+  latency_ms: number;
+};
