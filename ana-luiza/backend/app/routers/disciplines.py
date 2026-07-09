@@ -19,7 +19,11 @@ from app.services.academic_calculator import (
     classify_academic_status,
 )
 
-router = APIRouter(prefix="/api/disciplines", tags=["disciplines"])
+router = APIRouter(prefix="/api/disciplines")
+
+NOT_FOUND_RESPONSE = {"description": "Disciplina não encontrada."}
+VALIDATION_RESPONSE = {"description": "Entrada inválida, como nota fora de 0 a 10, peso inválido ou faltas maiores que o total."}
+INSUFFICIENT_DATA_RESPONSE = {"description": "Dados insuficientes para simulação completa; a resposta inclui warnings."}
 
 
 def _ensure_discipline(discipline_id: UUID) -> dict:
@@ -29,22 +33,50 @@ def _ensure_discipline(discipline_id: UUID) -> dict:
     return discipline
 
 
-@router.post("", response_model=DisciplineRead, status_code=201)
+@router.post(
+    "",
+    response_model=DisciplineRead,
+    status_code=201,
+    tags=["disciplines"],
+    summary="Cria disciplina manualmente",
+    description="Cadastra uma disciplina informada pelo estudante, sem depender de PDF ou SIGAA.",
+    responses={422: VALIDATION_RESPONSE},
+)
 def create_discipline(payload: DisciplineCreate) -> dict:
     return storage.create_discipline(payload.model_dump())
 
 
-@router.get("", response_model=list[DisciplineRead])
+@router.get(
+    "",
+    response_model=list[DisciplineRead],
+    tags=["disciplines"],
+    summary="Lista disciplinas",
+    description="Retorna todas as disciplinas cadastradas no armazenamento em memória.",
+)
 def list_disciplines() -> list[dict]:
     return storage.list_disciplines()
 
 
-@router.get("/{discipline_id}", response_model=DisciplineRead)
+@router.get(
+    "/{discipline_id}",
+    response_model=DisciplineRead,
+    tags=["disciplines"],
+    summary="Obtém uma disciplina",
+    description="Retorna os dados básicos de uma disciplina cadastrada.",
+    responses={404: NOT_FOUND_RESPONSE},
+)
 def get_discipline(discipline_id: UUID) -> dict:
     return _ensure_discipline(discipline_id)
 
 
-@router.patch("/{discipline_id}/attendance", response_model=DisciplineRead)
+@router.patch(
+    "/{discipline_id}/attendance",
+    response_model=DisciplineRead,
+    tags=["attendance"],
+    summary="Atualiza faltas e frequência",
+    description="Atualiza total de aulas/horas e faltas registradas para cálculo determinístico de frequência.",
+    responses={400: VALIDATION_RESPONSE, 404: NOT_FOUND_RESPONSE, 422: VALIDATION_RESPONSE},
+)
 def update_attendance(discipline_id: UUID, payload: AttendanceUpdate) -> dict:
     _ensure_discipline(discipline_id)
     try:
@@ -58,7 +90,15 @@ def update_attendance(discipline_id: UUID, payload: AttendanceUpdate) -> dict:
     return updated
 
 
-@router.post("/{discipline_id}/assessments", response_model=AssessmentRead, status_code=201)
+@router.post(
+    "/{discipline_id}/assessments",
+    response_model=AssessmentRead,
+    status_code=201,
+    tags=["assessments"],
+    summary="Adiciona avaliação",
+    description="Cadastra avaliação com nome, peso, nota opcional, data opcional e tópicos relacionados.",
+    responses={400: VALIDATION_RESPONSE, 404: NOT_FOUND_RESPONSE, 422: VALIDATION_RESPONSE},
+)
 def add_assessment(discipline_id: UUID, payload: AssessmentCreate) -> dict:
     _ensure_discipline(discipline_id)
     assessment = storage.add_assessment(str(discipline_id), payload.model_dump())
@@ -67,10 +107,30 @@ def add_assessment(discipline_id: UUID, payload: AssessmentCreate) -> dict:
     return assessment
 
 
-@router.get("/{discipline_id}/academic-simulation", response_model=AcademicSimulation)
+@router.get(
+    "/{discipline_id}/academic-simulation",
+    response_model=AcademicSimulation,
+    tags=["academic-simulation"],
+    summary="Calcula simulação acadêmica",
+    description=(
+        "Calcula média parcial, contribuição atual, nota necessária, menção, frequência, "
+        "risco por nota, risco por falta e situação acadêmica resumida. O cálculo é determinístico."
+    ),
+    responses={
+        200: INSUFFICIENT_DATA_RESPONSE,
+        400: VALIDATION_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+        422: VALIDATION_RESPONSE,
+    },
+)
 def academic_simulation(
     discipline_id: UUID,
-    target_average: float = Query(default=5.0, ge=0, le=10),
+    target_average: float = Query(
+        default=5.0,
+        ge=0,
+        le=10,
+        description="Média alvo para calcular a nota necessária nas avaliações restantes.",
+    ),
 ) -> dict:
     discipline = _ensure_discipline(discipline_id)
     assessments = storage.list_assessments(str(discipline_id))
@@ -86,7 +146,13 @@ def academic_simulation(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    warnings = list(dict.fromkeys(grade_result["warnings"] + attendance["warnings"] + academic_status["warnings"]))
+    warnings = list(
+        dict.fromkeys(
+            grade_result["warnings"]
+            + attendance["warnings"]
+            + academic_status["warnings"]
+        )
+    )
     return {
         **grade_result,
         "attendance": attendance,

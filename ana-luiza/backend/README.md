@@ -24,6 +24,23 @@ Health check:
 curl http://localhost:8000/api/health
 ```
 
+## Integração com frontend local
+
+A API permite CORS apenas para o frontend local do Vite:
+
+- `http://localhost:5173`
+- `http://127.0.0.1:5173`
+
+Essa lista é restrita de propósito para o MVP; não use CORS irrestrito em produção.
+
+## Documentação OpenAPI
+
+Com a API rodando localmente, acesse:
+
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+- OpenAPI JSON: http://localhost:8000/openapi.json
+
 ## Rodar testes
 
 ```bash

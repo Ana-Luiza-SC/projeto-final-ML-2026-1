@@ -19,6 +19,21 @@ class DisciplineCreate(BaseModel):
     total_class_hours: int | None = Field(default=None, ge=0)
     missed_class_hours: int | None = Field(default=None, ge=0)
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "code": "FGA0000",
+                "name": "Disciplina de Exemplo",
+                "professor": "Docente",
+                "class_code": "01",
+                "schedule_code": "24M12",
+                "local": "Sala 1",
+                "total_classes": 30,
+                "missed_classes": 2,
+            }
+        }
+    }
+
 
 class DisciplineRead(DisciplineCreate):
     id: UUID
@@ -31,6 +46,17 @@ class AttendanceUpdate(BaseModel):
     missed_classes: int | None = Field(default=None, ge=0)
     total_class_hours: int | None = Field(default=None, ge=0)
     missed_class_hours: int | None = Field(default=None, ge=0)
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "total_classes": 30,
+                "missed_classes": 4,
+                "total_class_hours": None,
+                "missed_class_hours": None,
+            }
+        }
+    }
 
 
 class AcademicActivity(BaseModel):
@@ -49,6 +75,18 @@ class AssessmentCreate(BaseModel):
     grade: float | None = Field(default=None, ge=0, le=10)
     date: Date | None = None
     topics: list[str] = Field(default_factory=list)
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "name": "Prova 1",
+                "weight": 30,
+                "grade": 8.0,
+                "date": "2026-07-20",
+                "topics": ["Introdução", "Exercícios"],
+            }
+        }
+    }
 
 
 class AssessmentRead(AssessmentCreate):
@@ -84,3 +122,33 @@ class AcademicSimulation(BaseModel):
     attendance: AttendanceResult
     academic_status: AcademicStatus
     warnings: list[str]
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "current_contribution": 2.4,
+                "partial_average": 8.0,
+                "completed_weight": 0.3,
+                "remaining_weight": 0.7,
+                "target_average": 5.0,
+                "required_average_on_remaining": 3.72,
+                "current_mention": "MS",
+                "projected_mention": "MM",
+                "grade_risk_level": "low",
+                "attendance": {
+                    "status": "ok",
+                    "source": "classes",
+                    "frequency": 0.9,
+                    "absence_percentage": 0.1,
+                    "risk_level": "low",
+                    "warnings": [],
+                },
+                "academic_status": {
+                    "status": "passing_simulation",
+                    "message": "A simulação indica menção de aprovação, mas ainda há avaliações pendentes.",
+                    "warnings": [],
+                },
+                "warnings": [],
+            }
+        }
+    }

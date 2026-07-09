@@ -1,17 +1,45 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.disciplines import router as disciplines_router
 
 app = FastAPI(
     title="EstudaUnB API",
     version="0.1.0",
-    description="Backend inicial do MVP EstudaUnB.",
+    description=(
+        "API para organização acadêmica de estudantes da UnB, com cadastro de "
+        "disciplinas, avaliações, faltas e simulação por menção/frequência."
+    ),
+    openapi_tags=[
+        {"name": "health", "description": "Verificação de disponibilidade da API."},
+        {"name": "disciplines", "description": "Cadastro e consulta de disciplinas."},
+        {"name": "assessments", "description": "Cadastro de avaliações, pesos e notas."},
+        {"name": "attendance", "description": "Atualização de faltas e frequência."},
+        {
+            "name": "academic-simulation",
+            "description": "Simulação determinística de nota, menção, frequência e riscos.",
+        },
+    ],
+)
+
+# CORS is intentionally restricted to local Vite dev origins for the MVP frontend.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-@app.get("/api/health")
+@app.get(
+    "/api/health",
+    tags=["health"],
+    summary="Verifica status da API",
+    description="Retorna status simples para o frontend confirmar que a API está disponível.",
+)
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
