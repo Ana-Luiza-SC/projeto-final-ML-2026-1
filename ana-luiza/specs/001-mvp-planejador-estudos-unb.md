@@ -251,6 +251,23 @@ Saída:
 ```
 
 
+
+## Regras acadêmicas da UnB
+
+- A UnB usa menções SS, MS, MM, MI, II e SR.
+- Menções de aprovação: SS, MS e MM.
+- Menções de reprovação: MI, II e SR.
+- Frequência mínima exigida: 75%.
+- Faltas acima de 25% indicam risco grave ou reprovação por falta.
+- O sistema deve alertar risco por falta mesmo quando a nota estiver boa.
+- O sistema não deve afirmar aprovação final se a frequência for desconhecida.
+- O cálculo de nota, menção e frequência é determinístico.
+- O agente de IA deve explicar e recomendar, mas não calcular livremente nota/frequência.
+- O sistema deve demonstrar o ciclo agente → API → produto.
+- PDFs de atestado de matrícula não devem ser armazenados por padrão.
+- O cadastro manual de disciplinas é fallback obrigatório.
+- Scraping deve ser apenas de páginas públicas, futuramente.
+
 ## Regras de cálculo de nota
 
 A média parcial deve ser calculada como:

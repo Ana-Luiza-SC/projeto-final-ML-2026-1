@@ -127,3 +127,20 @@ O sistema precisa demonstrar:
 - avaliação;
 - logs/monitoramento;
 - relatório.
+
+## Regras acadêmicas da UnB
+
+- A UnB usa menções SS, MS, MM, MI, II e SR.
+- Menções de aprovação: SS, MS e MM.
+- Menções de reprovação: MI, II e SR.
+- Frequência mínima exigida: 75%.
+- Faltas acima de 25% indicam risco grave ou reprovação por falta.
+- O sistema deve alertar risco por falta mesmo quando a nota estiver boa.
+- O sistema não deve afirmar aprovação final se a frequência for desconhecida.
+
+## Regras de cálculo acadêmico
+
+- O sistema deve demonstrar o ciclo agente → API → produto.
+- Cálculo de nota, menção e frequência deve ser determinístico.
+- O agente de IA deve explicar e recomendar usando esses cálculos como contexto.
+- O agente de IA não deve calcular livremente nota, menção ou frequência.
