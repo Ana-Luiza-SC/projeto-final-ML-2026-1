@@ -34,6 +34,28 @@ Para apontar para outra API, crie `frontend/.env` com:
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
+## Rodar com Docker
+
+Para subir backend e frontend juntos:
+
+```bash
+docker compose up --build
+```
+
+URLs locais:
+
+- Frontend: http://localhost:5173
+- Backend health: http://localhost:8000/api/health
+- Swagger: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+- OpenAPI JSON: http://localhost:8000/openapi.json
+
+O frontend em Docker é servido por nginx na porta `5173`. Durante o build, o Compose usa `VITE_API_BASE_URL=http://localhost:8000`, porque as chamadas HTTP são feitas pelo navegador fora da rede interna do Docker.
+
+Para configurar variáveis locais, copie `.env.example` para `.env` e ajuste apenas no seu ambiente. Não commite `.env`, `.env.local` ou arquivos `*.key`.
+
+`GOOGLE_API_KEY` é opcional. Sem essa chave, ou se a chamada ao LLM falhar, o backend continua funcionando com fallback determinístico por regras.
+
 ## Agente de recomendação
 
 O agente usa Google/Gemini quando configurado com `GOOGLE_API_KEY`. Se a chave não existir, se o LLM falhar, se houver timeout ou se a resposta vier inválida, o backend usa fallback determinístico por regras.
@@ -49,6 +71,7 @@ Endpoint no Swagger:
 ```bash
 cd backend && pytest
 cd frontend && npm run build
+docker compose config
 ```
 
 ## Escopo atual

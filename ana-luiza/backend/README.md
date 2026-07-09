@@ -24,6 +24,23 @@ Health check:
 curl http://localhost:8000/api/health
 ```
 
+## Rodar com Docker
+
+Na raiz do projeto:
+
+```bash
+docker compose up --build
+```
+
+O serviço `backend` fica disponível em:
+
+- API: http://localhost:8000
+- Health: http://localhost:8000/api/health
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+O container lê variáveis LLM do ambiente e também pode receber `.env` local pelo Docker Compose. O arquivo `.env` é opcional e não deve ser commitado. Sem `GOOGLE_API_KEY`, o agente usa fallback por regras.
+
 ## Integração com frontend local
 
 A API permite CORS apenas para o frontend local do Vite:
@@ -57,6 +74,7 @@ GOOGLE_API_KEY=
 LLM_MODEL=gemini-2.5-flash
 LLM_TIMEOUT_SECONDS=8
 LLM_FALLBACK_ENABLED=true
+VITE_API_BASE_URL=http://localhost:8000
 ```
 
 O sistema funciona sem `GOOGLE_API_KEY`: quando a chave não existe, quando o provedor falha, quando há timeout ou quando a resposta do LLM é inválida, o backend usa fallback determinístico por regras. Não commite `.env` real.
@@ -142,9 +160,9 @@ A frequência mínima é 75%. Faltas acima de 25% indicam risco grave ou reprova
 ## Limitações da primeira versão
 
 - Armazenamento apenas em memória.
-- Sem frontend.
+- Frontend separado em `../frontend`.
 - Sem autenticação.
-- Sem LLM.
+- LLM opcional; sem `GOOGLE_API_KEY`, o agente usa fallback por regras.
 - Sem scraping real do SIGAA.
 - Sem parsing real de PDF.
 - Sem calendário.
