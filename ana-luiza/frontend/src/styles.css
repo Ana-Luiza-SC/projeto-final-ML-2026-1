@@ -193,3 +193,22 @@ ul { padding-left: 1.2rem; }
   .study-plan-discipline, .day-selector { grid-template-columns: 1fr; }
   .window-list li { align-items: stretch; flex-direction: column; }
 }
+
+
+.import-page { display: grid; gap: 1rem; }
+.import-upload-panel, .import-preview-panel, .import-result-panel { display: grid; gap: 1rem; }
+.import-actions { gap: 0.75rem; flex-wrap: wrap; }
+.import-items { display: grid; gap: 0.9rem; }
+.import-item { display: grid; gap: 0.75rem; border: 1px solid #dde3ec; border-radius: 8px; padding: 1rem; background: #f9fafb; }
+.import-item-grid { display: grid; grid-template-columns: minmax(110px, 0.45fr) minmax(220px, 1.2fr) minmax(90px, 0.35fr) minmax(110px, 0.45fr); gap: 0.75rem; }
+.import-item-footer { display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; color: #667085; font-size: 0.9rem; }
+.import-report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.import-report-grid p { margin-bottom: 0.35rem; overflow-wrap: anywhere; }
+.status-recognized { border-left: 4px solid #18a058; }
+.status-ambiguous, .status-not_found { border-left: 4px solid #f5a524; }
+.status-duplicate, .status-activity, .status-rejected { border-left: 4px solid #d92d20; }
+
+@media (max-width: 860px) {
+  .import-item-grid, .import-report-grid { grid-template-columns: 1fr; }
+  .import-item-footer { align-items: stretch; flex-direction: column; }
+}

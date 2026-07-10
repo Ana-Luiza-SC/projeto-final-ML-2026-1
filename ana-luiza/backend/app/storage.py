@@ -5,6 +5,7 @@ from uuid import uuid4
 
 DISCIPLINES: dict[str, dict] = {}
 ASSESSMENTS: dict[str, list[dict]] = {}
+IMPORT_PREVIEWS: dict[str, dict] = {}
 
 
 def utc_now() -> datetime:
@@ -71,3 +72,65 @@ def add_assessment(discipline_id: str, payload: dict) -> dict | None:
 
 def list_assessments(discipline_id: str) -> list[dict]:
     return ASSESSMENTS.get(discipline_id, [])
+
+
+def normalize_discipline_code(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = "".join(char for char in value.upper() if char.isalnum())
+    return normalized or None
+
+
+def normalize_discipline_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return " ".join(value.casefold().strip().split()) or None
+
+
+def find_discipline_by_code(code: str | None) -> dict | None:
+    normalized = normalize_discipline_code(code)
+    if normalized is None:
+        return None
+    for discipline in DISCIPLINES.values():
+        if normalize_discipline_code(discipline.get("code")) == normalized:
+            return discipline
+    return None
+
+
+def find_discipline_by_name(name: str | None) -> dict | None:
+    normalized = normalize_discipline_name(name)
+    if normalized is None:
+        return None
+    for discipline in DISCIPLINES.values():
+        if normalize_discipline_name(discipline.get("name")) == normalized:
+            return discipline
+    return None
+
+
+def save_import_preview(preview: dict) -> dict:
+    IMPORT_PREVIEWS[str(preview["preview_id"])] = preview
+    return preview
+
+
+def get_import_preview(preview_id: str) -> dict | None:
+    preview = IMPORT_PREVIEWS.get(preview_id)
+    if preview is None:
+        return None
+    expires_at = preview.get("expires_at")
+    if expires_at is not None and expires_at <= utc_now():
+        IMPORT_PREVIEWS.pop(preview_id, None)
+        return None
+    return preview
+
+
+def delete_import_preview(preview_id: str) -> None:
+    IMPORT_PREVIEWS.pop(preview_id, None)
+
+
+def cleanup_expired_import_previews() -> int:
+    now = utc_now()
+    expired = [key for key, value in IMPORT_PREVIEWS.items() if value.get("expires_at") and value["expires_at"] <= now]
+    for key in expired:
+        IMPORT_PREVIEWS.pop(key, None)
+    return len(expired)
+

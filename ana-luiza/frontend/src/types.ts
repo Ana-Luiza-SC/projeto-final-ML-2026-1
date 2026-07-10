@@ -191,3 +191,73 @@ export type StudyPlanResponse = {
   };
   request_id: string;
 };
+
+
+export type ImportPreviewStatus = "recognized" | "ambiguous" | "not_found" | "duplicate" | "activity" | "rejected";
+export type ImportItemType = "discipline" | "activity";
+export type SigaaLookupStatus = "not_queried" | "found" | "not_found" | "error";
+
+export type ImportPreviewItem = {
+  preview_item_id: string;
+  item_type: ImportItemType;
+  status: ImportPreviewStatus;
+  selected: boolean;
+  code?: string | null;
+  name?: string | null;
+  class_code?: string | null;
+  schedule_code?: string | null;
+  local?: string | null;
+  source: "pdf_local" | "pdf_local_sigaa_enriched";
+  sigaa_lookup: SigaaLookupStatus;
+  confidence: "low" | "medium" | "high";
+  warnings: string[];
+};
+
+export type MatriculaPdfPreviewResponse = {
+  status: "success" | "no_items" | "extraction_failed";
+  preview_id: string;
+  expires_at: string;
+  items: ImportPreviewItem[];
+  summary: {
+    recognized_count: number;
+    ambiguous_count: number;
+    not_found_count: number;
+    duplicate_count: number;
+    activity_count: number;
+    rejected_count: number;
+  };
+  warnings: string[];
+  request_id: string;
+};
+
+export type ImportConfirmationItem = {
+  preview_item_id: string;
+  selected: boolean;
+  code?: string | null;
+  name?: string | null;
+  class_code?: string | null;
+  schedule_code?: string | null;
+  local?: string | null;
+};
+
+export type MatriculaImportConfirmRequest = {
+  preview_id: string;
+  items: ImportConfirmationItem[];
+};
+
+export type MatriculaImportConfirmResponse = {
+  status: "success" | "partial_success" | "no_items" | "error";
+  preview_id: string;
+  created: { preview_item_id: string; discipline_id: string; code: string; name: string }[];
+  duplicates: { preview_item_id: string; code?: string | null; name?: string | null; reason: string }[];
+  rejected: { preview_item_id: string; code?: string | null; name?: string | null; reason: string }[];
+  skipped: { preview_item_id: string; code?: string | null; name?: string | null; reason: string }[];
+  warnings: string[];
+  summary: {
+    created_count: number;
+    duplicate_count: number;
+    rejected_count: number;
+    skipped_count: number;
+  };
+  request_id: string;
+};

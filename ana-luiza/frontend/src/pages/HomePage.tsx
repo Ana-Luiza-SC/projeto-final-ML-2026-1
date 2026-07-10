@@ -3,9 +3,10 @@ import { ApiStatus } from "../components/ApiStatus";
 
 type Props = {
   onOpenDisciplines: () => void;
+  onOpenMatriculaImport?: () => void;
 };
 
-export function HomePage({ onOpenDisciplines }: Props) {
+export function HomePage({ onOpenDisciplines, onOpenMatriculaImport }: Props) {
   const apiBaseUrl = getApiBaseUrl();
 
   return (
@@ -17,6 +18,7 @@ export function HomePage({ onOpenDisciplines }: Props) {
         <ApiStatus />
         <div className="hero-actions">
           <button type="button" onClick={onOpenDisciplines}>Ir para disciplinas</button>
+          {onOpenMatriculaImport && <button type="button" onClick={onOpenMatriculaImport}>Importar comprovante</button>}
           <a href={`${apiBaseUrl}/docs`} target="_blank" rel="noreferrer">Swagger</a>
           <a href={`${apiBaseUrl}/redoc`} target="_blank" rel="noreferrer">ReDoc</a>
         </div>

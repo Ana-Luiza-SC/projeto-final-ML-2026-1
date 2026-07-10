@@ -2,3 +2,12 @@
 .env.local
 *.key
 backend/app/cache/*.json
+
+# Dados pessoais e uploads — nunca commitar
+*.pdf
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+backend/app/data/
+

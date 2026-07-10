@@ -175,6 +175,18 @@ StudyPlanDay = Literal[
     "sunday",
 ]
 StudyPlanSource = Literal["llm_assisted", "deterministic_fallback"]
+ImportItemType = Literal["discipline", "activity"]
+ImportPreviewStatus = Literal[
+    "recognized",
+    "ambiguous",
+    "not_found",
+    "duplicate",
+    "activity",
+    "rejected",
+]
+ImportSource = Literal["pdf_local", "pdf_local_sigaa_enriched"]
+SigaaLookupStatus = Literal["not_queried", "found", "not_found", "error"]
+ImportConfirmStatus = Literal["success", "partial_success", "no_items", "error"]
 
 
 def _parse_hhmm(value: str) -> time:
@@ -464,3 +476,131 @@ class SigaaComponentAttachRequest(BaseModel):
             }
         }
     }
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = " ".join(value.strip().split())
+    return cleaned or None
+
+
+class ImportPreviewItem(BaseModel):
+    preview_item_id: UUID
+    item_type: ImportItemType
+    status: ImportPreviewStatus
+    selected: bool
+    code: str | None = Field(default=None, max_length=30)
+    name: str | None = Field(default=None, max_length=160)
+    class_code: str | None = Field(default=None, max_length=30)
+    schedule_code: str | None = Field(default=None, max_length=60)
+    local: str | None = Field(default=None, max_length=120)
+    source: ImportSource = "pdf_local"
+    sigaa_lookup: SigaaLookupStatus = "not_queried"
+    confidence: Literal["low", "medium", "high"]
+    warnings: list[str] = Field(default_factory=list, max_length=10)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("code", "name", "class_code", "schedule_code", "local", mode="before")
+    @classmethod
+    def clean_optional_fields(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return _clean_optional_text(value)
+        return value
+
+
+class ImportPreviewSummary(BaseModel):
+    recognized_count: int = Field(..., ge=0)
+    ambiguous_count: int = Field(..., ge=0)
+    not_found_count: int = Field(..., ge=0)
+    duplicate_count: int = Field(..., ge=0)
+    activity_count: int = Field(..., ge=0)
+    rejected_count: int = Field(..., ge=0)
+
+
+class MatriculaPdfPreviewResponse(BaseModel):
+    status: Literal["success", "no_items", "extraction_failed"]
+    preview_id: UUID
+    expires_at: datetime
+    items: list[ImportPreviewItem]
+    summary: ImportPreviewSummary
+    warnings: list[str] = Field(default_factory=list)
+    request_id: str
+
+
+class ImportConfirmationItem(BaseModel):
+    preview_item_id: UUID
+    selected: bool = True
+    code: str | None = Field(default=None, max_length=30)
+    name: str | None = Field(default=None, max_length=160)
+    class_code: str | None = Field(default=None, max_length=30)
+    schedule_code: str | None = Field(default=None, max_length=60)
+    local: str | None = Field(default=None, max_length=120)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("code", "name", "class_code", "schedule_code", "local", mode="before")
+    @classmethod
+    def clean_fields(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return _clean_optional_text(value)
+        return value
+
+
+class MatriculaImportConfirmRequest(BaseModel):
+    preview_id: UUID
+    items: list[ImportConfirmationItem] = Field(..., max_length=50)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("items")
+    @classmethod
+    def validate_unique_preview_items(
+        cls, value: list[ImportConfirmationItem]
+    ) -> list[ImportConfirmationItem]:
+        ids = [str(item.preview_item_id) for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Itens de pre-visualizacao nao podem se repetir.")
+        return value
+
+
+class ImportCreatedItem(BaseModel):
+    preview_item_id: UUID
+    discipline_id: UUID
+    code: str
+    name: str
+
+
+class ImportRejectedItem(BaseModel):
+    preview_item_id: UUID
+    code: str | None = None
+    name: str | None = None
+    reason: str
+
+
+class ImportSkippedItem(BaseModel):
+    preview_item_id: UUID
+    code: str | None = None
+    name: str | None = None
+    reason: str
+
+
+class ImportConfirmSummary(BaseModel):
+    created_count: int = Field(..., ge=0)
+    duplicate_count: int = Field(..., ge=0)
+    rejected_count: int = Field(..., ge=0)
+    skipped_count: int = Field(..., ge=0)
+
+
+class MatriculaImportConfirmResponse(BaseModel):
+    status: ImportConfirmStatus
+    preview_id: UUID
+    created: list[ImportCreatedItem]
+    duplicates: list[ImportRejectedItem]
+    rejected: list[ImportRejectedItem]
+    skipped: list[ImportSkippedItem]
+    warnings: list[str] = Field(default_factory=list)
+    summary: ImportConfirmSummary
+    request_id: str
+
