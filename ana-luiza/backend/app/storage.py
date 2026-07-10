@@ -39,6 +39,27 @@ def update_attendance(discipline_id: str, payload: dict) -> dict | None:
     return record
 
 
+
+
+def attach_sigaa_component(discipline_id: str, component: dict) -> dict | None:
+    record = get_discipline(discipline_id)
+    if record is None:
+        return None
+    now = utc_now()
+    record.update(
+        {
+            "sigaa_code": component.get("code"),
+            "sigaa_source_url": component.get("source_url"),
+            "syllabus": component.get("syllabus") or "",
+            "current_program": component.get("current_program") or "",
+            "workload_hours": component.get("workload_hours"),
+            "sigaa_cached_at": now,
+            "updated_at": now,
+        }
+    )
+    return record
+
+
 def add_assessment(discipline_id: str, payload: dict) -> dict | None:
     if discipline_id not in DISCIPLINES:
         return None

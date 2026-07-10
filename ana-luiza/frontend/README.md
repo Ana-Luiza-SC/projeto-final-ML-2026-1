@@ -60,6 +60,15 @@ uvicorn app.main:app --reload
 Swagger: http://localhost:8000/docs
 ReDoc: http://localhost:8000/redoc
 
+## Dados públicos do SIGAA
+
+Na página de detalhe da disciplina, a seção `Dados públicos do SIGAA` permite buscar componentes curriculares por código ou nome e associar o resultado à disciplina cadastrada.
+
+A busca usa o backend em `GET /api/sigaa/components/search?query=...` e a associação usa `PATCH /api/disciplines/{id}/sigaa-component`. Se a busca falhar ou não encontrar dados, a tela mostra mensagem amigável e mantém os dados cadastrados manualmente.
+
+Quando ementa ou programa atual não vierem da fonte pública, a interface mostra que esses dados não estão disponíveis na fonte consultada. A chave `GOOGLE_API_KEY` não é usada nem exposta no frontend.
+
+
 ## Painel de recomendação
 
 No detalhe da disciplina, informe opcionalmente:
@@ -85,5 +94,5 @@ Depois clique em `Gerar recomendação de estudo`. O backend funciona sem `GOOGL
 - Sem calendário.
 - Sem upload ou parsing de PDF.
 - Agente disponível via backend; sem `GOOGLE_API_KEY`, usa fallback por regras.
-- Sem scraping SIGAA.
+- Consulta SIGAA limitada à fonte pública de componentes curriculares, via backend.
 - Dados do backend ficam em memória nesta etapa.

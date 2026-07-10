@@ -18,6 +18,12 @@ class DisciplineCreate(BaseModel):
     missed_classes: int | None = Field(default=None, ge=0)
     total_class_hours: int | None = Field(default=None, ge=0)
     missed_class_hours: int | None = Field(default=None, ge=0)
+    sigaa_code: str | None = None
+    sigaa_source_url: str | None = None
+    syllabus: str | None = None
+    current_program: str | None = None
+    workload_hours: int | None = Field(default=None, ge=0)
+    sigaa_cached_at: datetime | None = None
 
     model_config = {
         "json_schema_extra": {
@@ -46,7 +52,6 @@ class AttendanceUpdate(BaseModel):
     missed_classes: int | None = Field(default=None, ge=0)
     total_class_hours: int | None = Field(default=None, ge=0)
     missed_class_hours: int | None = Field(default=None, ge=0)
-
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -158,6 +163,8 @@ TopicDifficulty = Literal["low", "medium", "high"]
 TopicStatus = Literal["not_started", "in_progress", "reviewed"]
 DedicationLevel = Literal["low", "medium", "high"]
 RecommendationProvider = Literal["google", "rules"]
+SigaaSearchStatus = Literal["found", "not_found", "error"]
+SigaaSource = Literal["sigaa_public_components"]
 
 
 class StudyTopicInput(BaseModel):
@@ -219,6 +226,84 @@ class StudyRecommendationResponse(BaseModel):
                 "used_fallback": True,
                 "provider": "rules",
                 "latency_ms": 12,
+            }
+        }
+    }
+
+
+class SigaaComponent(BaseModel):
+    code: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
+    type: str | None = None
+    unit: str | None = None
+    workload_hours: int | None = Field(default=None, ge=0)
+    syllabus: str | None = None
+    current_program: str | None = None
+    source_url: str
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "code": "FGA0315",
+                "name": "QUALIDADE DE SOFTWARE 1",
+                "type": "DISCIPLINA",
+                "unit": "FCTE",
+                "workload_hours": 60,
+                "syllabus": "",
+                "current_program": "",
+                "source_url": "https://sigaa.unb.br/sigaa/public/componentes/busca_componentes.jsf",
+            }
+        }
+    }
+
+
+class SigaaComponentSearchResponse(BaseModel):
+    status: SigaaSearchStatus
+    source: SigaaSource = "sigaa_public_components"
+    query: str
+    component: SigaaComponent | None = None
+    cached: bool = False
+    warnings: list[str] = Field(default_factory=list)
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "status": "found",
+                "source": "sigaa_public_components",
+                "query": "FGA0315",
+                "component": {
+                    "code": "FGA0315",
+                    "name": "QUALIDADE DE SOFTWARE 1",
+                    "type": "DISCIPLINA",
+                    "unit": "FCTE",
+                    "workload_hours": 60,
+                    "syllabus": "",
+                    "current_program": "",
+                    "source_url": "https://sigaa.unb.br/sigaa/public/componentes/busca_componentes.jsf",
+                },
+                "cached": False,
+                "warnings": [],
+            }
+        }
+    }
+
+
+class SigaaComponentAttachRequest(BaseModel):
+    component: SigaaComponent
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "component": {
+                    "code": "FGA0315",
+                    "name": "QUALIDADE DE SOFTWARE 1",
+                    "type": "DISCIPLINA",
+                    "unit": "FCTE",
+                    "workload_hours": 60,
+                    "syllabus": "",
+                    "current_program": "",
+                    "source_url": "https://sigaa.unb.br/sigaa/public/componentes/busca_componentes.jsf",
+                }
             }
         }
     }

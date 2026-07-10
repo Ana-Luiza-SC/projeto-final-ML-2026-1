@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.agent import router as agent_router
 from app.routers.disciplines import router as disciplines_router
+from app.routers.sigaa import router as sigaa_router
 
 app = FastAPI(
     title="EstudaUnB API",
@@ -19,6 +20,7 @@ app = FastAPI(
         {"name": "assessments", "description": "Cadastro de avaliações, pesos e notas."},
         {"name": "attendance", "description": "Atualização de faltas e frequência."},
         {"name": "agent", "description": "Recomendação de estudos com fallback por regras."},
+        {"name": "sigaa", "description": "Consulta pública de componentes curriculares do SIGAA/UnB."},
         {
             "name": "academic-simulation",
             "description": "Simulação determinística de nota, menção, frequência e riscos.",
@@ -48,3 +50,4 @@ def health() -> dict[str, str]:
 
 app.include_router(disciplines_router)
 app.include_router(agent_router)
+app.include_router(sigaa_router)

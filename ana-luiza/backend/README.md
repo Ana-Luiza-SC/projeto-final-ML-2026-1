@@ -58,6 +58,22 @@ Com a API rodando localmente, acesse:
 - ReDoc: http://localhost:8000/redoc
 - OpenAPI JSON: http://localhost:8000/openapi.json
 
+## Componentes curriculares públicos do SIGAA
+
+Endpoints disponíveis:
+
+- `GET /api/sigaa/components/search?query=FGA0315`
+- `PATCH /api/disciplines/{id}/sigaa-component`
+
+A fonte usada é a página pública de componentes curriculares do SIGAA/UnB: https://sigaa.unb.br/sigaa/public/componentes/busca_componentes.jsf
+
+A implementação é best-effort porque o SIGAA usa JSF. O parser usa `requests` e `BeautifulSoup`; se a fonte pública não responder, mudar de estrutura ou não retornar o componente, a API devolve `not_found` ou `error` com warning amigável. O cadastro manual continua sendo o fallback funcional.
+
+O cache local fica em arquivo JSON runtime ignorado pelo Git. Os testes usam fixtures HTML locais e não fazem chamada real ao SIGAA.
+
+Esta integração não acessa área autenticada, não solicita login ou senha, não armazena dados pessoais, não consulta taxa de reprovação e não avalia professor.
+
+
 ## Agente de recomendação de estudos
 
 O backend expõe o endpoint:
@@ -112,6 +128,8 @@ pytest
 - `PATCH /api/disciplines/{id}/attendance`
 - `POST /api/disciplines/{id}/assessments`
 - `GET /api/disciplines/{id}/academic-simulation?target_average=5.0`
+- `GET /api/sigaa/components/search?query=FGA0315`
+- `PATCH /api/disciplines/{id}/sigaa-component`
 
 ## Exemplos
 
@@ -163,6 +181,6 @@ A frequência mínima é 75%. Faltas acima de 25% indicam risco grave ou reprova
 - Frontend separado em `../frontend`.
 - Sem autenticação.
 - LLM opcional; sem `GOOGLE_API_KEY`, o agente usa fallback por regras.
-- Sem scraping real do SIGAA.
+- Consulta SIGAA limitada à fonte pública de componentes curriculares; sem área autenticada e sem scraping massivo.
 - Sem parsing real de PDF.
 - Sem calendário.

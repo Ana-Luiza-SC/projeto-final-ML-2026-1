@@ -16,6 +16,12 @@ export type Discipline = {
   missed_class_hours?: number | null;
   created_at?: string;
   updated_at?: string;
+  sigaa_code?: string | null;
+  sigaa_source_url?: string | null;
+  syllabus?: string | null;
+  current_program?: string | null;
+  workload_hours?: number | null;
+  sigaa_cached_at?: string | null;
 };
 
 export type DisciplineCreatePayload = {
@@ -25,6 +31,12 @@ export type DisciplineCreatePayload = {
   class_code?: string | null;
   schedule_code?: string | null;
   local?: string | null;
+  sigaa_code?: string | null;
+  sigaa_source_url?: string | null;
+  syllabus?: string | null;
+  current_program?: string | null;
+  workload_hours?: number | null;
+  sigaa_cached_at?: string | null;
 };
 
 export type AttendancePayload = {
@@ -108,4 +120,25 @@ export type StudyRecommendationResponse = {
   used_fallback: boolean;
   provider: "google" | "rules";
   latency_ms: number;
+};
+
+
+export type SigaaComponent = {
+  code: string;
+  name: string;
+  type?: string | null;
+  unit?: string | null;
+  workload_hours?: number | null;
+  syllabus?: string | null;
+  current_program?: string | null;
+  source_url: string;
+};
+
+export type SigaaComponentSearchResponse = {
+  status: "found" | "not_found" | "error";
+  source: "sigaa_public_components";
+  query: string;
+  component: SigaaComponent | null;
+  cached: boolean;
+  warnings: string[];
 };

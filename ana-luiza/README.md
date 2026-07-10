@@ -56,6 +56,17 @@ Para configurar variáveis locais, copie `.env.example` para `.env` e ajuste ape
 
 `GOOGLE_API_KEY` é opcional. Sem essa chave, ou se a chamada ao LLM falhar, o backend continua funcionando com fallback determinístico por regras.
 
+## Componentes curriculares do SIGAA
+
+O backend possui uma consulta best-effort à fonte pública de componentes curriculares do SIGAA/UnB:
+
+- Fonte pública: https://sigaa.unb.br/sigaa/public/componentes/busca_componentes.jsf
+- Busca: `GET /api/sigaa/components/search?query=FGA0315`
+- Associação à disciplina: `PATCH /api/disciplines/{id}/sigaa-component`
+
+A consulta usa cache local runtime e não depende de login. Se o SIGAA estiver indisponível, se a página JSF mudar ou se o componente não for encontrado, o sistema continua funcionando com o cadastro manual da disciplina. A integração não coleta dados de estudante, não usa páginas autenticadas, não consulta taxa de reprovação e não avalia professor.
+
+
 ## Agente de recomendação
 
 O agente usa Google/Gemini quando configurado com `GOOGLE_API_KEY`. Se a chave não existir, se o LLM falhar, se houver timeout ou se a resposta vier inválida, o backend usa fallback determinístico por regras.
@@ -71,11 +82,11 @@ Endpoint no Swagger:
 ```bash
 cd backend && pytest
 cd frontend && npm run build
-docker compose config
+docker compose config --no-env-resolution
 ```
 
 ## Escopo atual
 
 - Backend FastAPI em memória.
 - Frontend React mínimo para cadastro de disciplinas, avaliações, faltas e simulação.
-- Sem login, LLM, scraping SIGAA, upload/parsing de PDF, calendário ou SQLite nesta fatia.
+- Sem login, upload/parsing de PDF, calendário ou SQLite nesta fatia. Integração SIGAA limitada à fonte pública de componentes curriculares.

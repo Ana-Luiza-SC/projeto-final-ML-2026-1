@@ -6,6 +6,8 @@ import type {
   AttendancePayload,
   Discipline,
   DisciplineCreatePayload,
+  SigaaComponent,
+  SigaaComponentSearchResponse,
   StudyRecommendationRequest,
   StudyRecommendationResponse,
 } from "../types";
@@ -99,5 +101,18 @@ export function createStudyRecommendation(payload: StudyRecommendationRequest) {
   return request<StudyRecommendationResponse>("/api/agent/study-recommendation", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+
+export function searchSigaaComponent(query: string) {
+  const params = new URLSearchParams({ query });
+  return request<SigaaComponentSearchResponse>(`/api/sigaa/components/search?${params.toString()}`);
+}
+
+export function attachSigaaComponent(id: string, component: SigaaComponent) {
+  return request<Discipline>(`/api/disciplines/${id}/sigaa-component`, {
+    method: "PATCH",
+    body: JSON.stringify({ component }),
   });
 }

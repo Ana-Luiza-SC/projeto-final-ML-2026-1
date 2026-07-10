@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { createAssessment, createStudyRecommendation, getAcademicSimulation, getDiscipline, updateAttendance } from "../api/client";
+import { attachSigaaComponent, createAssessment, createStudyRecommendation, getAcademicSimulation, getDiscipline, searchSigaaComponent, updateAttendance } from "../api/client";
 import { AcademicSimulationPanel } from "../components/AcademicSimulationPanel";
 import { AssessmentForm } from "../components/AssessmentForm";
 import { AttendanceForm } from "../components/AttendanceForm";
 import { PendingTopicsForm } from "../components/PendingTopicsForm";
 import { StudyRecommendationPanel } from "../components/StudyRecommendationPanel";
-import type { AcademicSimulation, AssessmentPayload, AttendancePayload, Discipline, StudyRecommendationResponse, StudyTopicInput } from "../types";
+import { SigaaComponentPanel } from "../components/SigaaComponentPanel";
+import type { AcademicSimulation, AssessmentPayload, AttendancePayload, Discipline, SigaaComponent, SigaaComponentSearchResponse, StudyRecommendationResponse, StudyTopicInput } from "../types";
 
 type Props = {
   disciplineId: string;
@@ -16,6 +17,7 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
   const [discipline, setDiscipline] = useState<Discipline | null>(null);
   const [simulation, setSimulation] = useState<AcademicSimulation | null>(null);
   const [recommendation, setRecommendation] = useState<StudyRecommendationResponse | null>(null);
+  const [sigaaResult, setSigaaResult] = useState<SigaaComponentSearchResponse | null>(null);
   const [pendingTopics, setPendingTopics] = useState<StudyTopicInput[]>([]);
   const [userGoal, setUserGoal] = useState("");
   const [targetAverage, setTargetAverage] = useState("5.0");
@@ -24,9 +26,12 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
   const [loadingAssessment, setLoadingAssessment] = useState(false);
   const [loadingSimulation, setLoadingSimulation] = useState(false);
   const [loadingRecommendation, setLoadingRecommendation] = useState(false);
+  const [loadingSigaa, setLoadingSigaa] = useState(false);
+  const [attachingSigaa, setAttachingSigaa] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [simulationError, setSimulationError] = useState<string | null>(null);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  const [sigaaError, setSigaaError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   async function loadDiscipline() {
@@ -83,6 +88,33 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
     }
   }
 
+
+  async function handleSigaaSearch(query: string) {
+    setLoadingSigaa(true);
+    setSigaaError(null);
+    try {
+      setSigaaResult(await searchSigaaComponent(query));
+    } catch (err) {
+      setSigaaError(err instanceof Error ? err.message : "A consulta ao SIGAA falhou.");
+    } finally {
+      setLoadingSigaa(false);
+    }
+  }
+
+  async function handleSigaaAttach(component: SigaaComponent) {
+    setAttachingSigaa(true);
+    setSigaaError(null);
+    setNotice(null);
+    try {
+      const updated = await attachSigaaComponent(disciplineId, component);
+      setDiscipline(updated);
+      setNotice("Dados públicos do SIGAA associados à disciplina.");
+    } catch (err) {
+      setSigaaError(err instanceof Error ? err.message : "Não foi possível associar os dados do SIGAA.");
+    } finally {
+      setAttachingSigaa(false);
+    }
+  }
 
 
   async function handleRecommendation() {
@@ -170,6 +202,15 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
         <div className="stack">
           <AttendanceForm discipline={discipline} loading={loadingAttendance} onSubmit={handleAttendance} />
           <AssessmentForm loading={loadingAssessment} onSubmit={handleAssessment} />
+          <SigaaComponentPanel
+            discipline={discipline}
+            result={sigaaResult}
+            loading={loadingSigaa}
+            attaching={attachingSigaa}
+            error={sigaaError}
+            onSearch={handleSigaaSearch}
+            onAttach={handleSigaaAttach}
+          />
           <PendingTopicsForm topics={pendingTopics} onChange={setPendingTopics} />
         </div>
         <div className="stack">
