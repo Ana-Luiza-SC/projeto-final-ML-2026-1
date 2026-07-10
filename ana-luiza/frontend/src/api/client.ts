@@ -10,6 +10,8 @@ import type {
   SigaaComponentSearchResponse,
   StudyRecommendationRequest,
   StudyRecommendationResponse,
+  StudyPlanRequest,
+  StudyPlanResponse,
 } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -99,6 +101,14 @@ export function getAcademicSimulation(id: string, targetAverage: number) {
 
 export function createStudyRecommendation(payload: StudyRecommendationRequest) {
   return request<StudyRecommendationResponse>("/api/agent/study-recommendation", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+
+export function createStudyPlan(payload: StudyPlanRequest) {
+  return request<StudyPlanResponse>("/api/study-plans/generate", {
     method: "POST",
     body: JSON.stringify(payload),
   });

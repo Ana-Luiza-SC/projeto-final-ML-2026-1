@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import date as Date, datetime
+from datetime import date as Date, datetime, time
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class DisciplineCreate(BaseModel):
@@ -165,6 +165,28 @@ DedicationLevel = Literal["low", "medium", "high"]
 RecommendationProvider = Literal["google", "rules"]
 SigaaSearchStatus = Literal["found", "not_found", "error"]
 SigaaSource = Literal["sigaa_public_components"]
+StudyPlanDay = Literal[
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+]
+StudyPlanSource = Literal["llm_assisted", "deterministic_fallback"]
+
+
+def _parse_hhmm(value: str) -> time:
+    try:
+        return time.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("Horário deve estar no formato HH:MM.") from exc
+
+
+def _minutes(value: str) -> int:
+    parsed = _parse_hhmm(value)
+    return parsed.hour * 60 + parsed.minute
 
 
 class StudyTopicInput(BaseModel):
@@ -229,6 +251,141 @@ class StudyRecommendationResponse(BaseModel):
             }
         }
     }
+
+
+class StudyPlanTimeWindow(BaseModel):
+    day: StudyPlanDay
+    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def validate_time_format(cls, value: str) -> str:
+        _parse_hhmm(value)
+        return value
+
+    @model_validator(mode="after")
+    def validate_time_order(self) -> "StudyPlanTimeWindow":
+        if _minutes(self.start_time) >= _minutes(self.end_time):
+            raise ValueError("Início da janela deve ser menor que o fim.")
+        return self
+
+
+class StudyPlanAvailability(BaseModel):
+    available_hours_per_week: float = Field(..., gt=0, le=80)
+    days_available: list[StudyPlanDay] = Field(..., min_length=1, max_length=7)
+    time_windows: list[StudyPlanTimeWindow] = Field(default_factory=list)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("days_available")
+    @classmethod
+    def validate_unique_days(cls, value: list[StudyPlanDay]) -> list[StudyPlanDay]:
+        if len(value) != len(set(value)):
+            raise ValueError("Dias disponíveis não podem se repetir.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_windows(self) -> "StudyPlanAvailability":
+        allowed_days = set(self.days_available)
+        windows_by_day: dict[str, list[StudyPlanTimeWindow]] = {}
+        for window in self.time_windows:
+            if window.day not in allowed_days:
+                raise ValueError("Janelas devem pertencer aos dias disponíveis.")
+            windows_by_day.setdefault(window.day, []).append(window)
+
+        for windows in windows_by_day.values():
+            ordered = sorted(windows, key=lambda item: _minutes(item.start_time))
+            for previous, current in zip(ordered, ordered[1:]):
+                if _minutes(current.start_time) < _minutes(previous.end_time):
+                    raise ValueError("Janelas de disponibilidade não podem se sobrepor.")
+        return self
+
+
+class StudyPlanPriority(BaseModel):
+    discipline_id: UUID
+    priority: int = Field(..., ge=1, le=5)
+
+    model_config = {"extra": "forbid"}
+
+
+class StudyPlanRequest(BaseModel):
+    discipline_ids: list[UUID] = Field(..., min_length=1, max_length=20)
+    availability: StudyPlanAvailability
+    max_session_minutes: int = Field(..., ge=30, le=240)
+    priorities: list[StudyPlanPriority] = Field(default_factory=list, max_length=20)
+    objective_text: str | None = Field(default=None, max_length=500)
+
+    model_config = {
+        "extra": "forbid",
+        "json_schema_extra": {
+            "example": {
+                "discipline_ids": [
+                    "00000000-0000-0000-0000-000000000001",
+                    "00000000-0000-0000-0000-000000000002",
+                ],
+                "availability": {
+                    "available_hours_per_week": 6,
+                    "days_available": ["monday", "wednesday", "friday"],
+                },
+                "max_session_minutes": 90,
+                "priorities": [
+                    {
+                        "discipline_id": "00000000-0000-0000-0000-000000000001",
+                        "priority": 5,
+                    }
+                ],
+                "objective_text": "quero revisar para a prova da próxima semana",
+            }
+        },
+    }
+
+    @model_validator(mode="after")
+    def validate_request(self) -> "StudyPlanRequest":
+        ids = [str(item) for item in self.discipline_ids]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Disciplinas selecionadas não podem se repetir.")
+        priority_ids = [str(item.discipline_id) for item in self.priorities]
+        if len(priority_ids) != len(set(priority_ids)):
+            raise ValueError("Prioridades não podem repetir disciplina.")
+        selected = set(ids)
+        if any(item not in selected for item in priority_ids):
+            raise ValueError("Prioridades devem referenciar apenas disciplinas selecionadas.")
+        if self.max_session_minutes % 30 != 0:
+            raise ValueError("Duração máxima deve ser múltipla de 30 minutos.")
+        return self
+
+
+class StudyPlanSession(BaseModel):
+    day: StudyPlanDay
+    sequence: int = Field(..., ge=1)
+    discipline_id: UUID
+    discipline_code: str
+    discipline_name: str
+    duration_minutes: int = Field(..., gt=0)
+    activity: str
+    start_time: str | None = None
+    end_time: str | None = None
+
+
+class StudyPlanMetrics(BaseModel):
+    requested_minutes: int
+    allocated_minutes: int
+    unallocated_minutes: int
+    session_count: int
+    discipline_count: int
+
+
+class StudyPlanResponse(BaseModel):
+    status: Literal["success"]
+    source: StudyPlanSource
+    plan: list[StudyPlanSession] = Field(..., min_length=1)
+    summary: str
+    warnings: list[str] = Field(default_factory=list)
+    metrics: StudyPlanMetrics
+    request_id: str
 
 
 class SigaaComponent(BaseModel):

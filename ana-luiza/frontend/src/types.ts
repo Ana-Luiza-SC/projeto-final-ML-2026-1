@@ -142,3 +142,52 @@ export type SigaaComponentSearchResponse = {
   cached: boolean;
   warnings: string[];
 };
+
+
+export type StudyPlanDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+
+export type StudyPlanTimeWindow = {
+  day: StudyPlanDay;
+  start_time: string;
+  end_time: string;
+};
+
+export type StudyPlanRequest = {
+  discipline_ids: string[];
+  availability: {
+    available_hours_per_week: number;
+    days_available: StudyPlanDay[];
+    time_windows?: StudyPlanTimeWindow[];
+  };
+  max_session_minutes: number;
+  priorities: { discipline_id: string; priority: number }[];
+  objective_text?: string | null;
+};
+
+export type StudyPlanSession = {
+  day: StudyPlanDay;
+  sequence: number;
+  discipline_id: string;
+  discipline_code: string;
+  discipline_name: string;
+  duration_minutes: number;
+  activity: string;
+  start_time?: string | null;
+  end_time?: string | null;
+};
+
+export type StudyPlanResponse = {
+  status: "success";
+  source: "llm_assisted" | "deterministic_fallback";
+  plan: StudyPlanSession[];
+  summary: string;
+  warnings: string[];
+  metrics: {
+    requested_minutes: number;
+    allocated_minutes: number;
+    unallocated_minutes: number;
+    session_count: number;
+    discipline_count: number;
+  };
+  request_id: string;
+};
