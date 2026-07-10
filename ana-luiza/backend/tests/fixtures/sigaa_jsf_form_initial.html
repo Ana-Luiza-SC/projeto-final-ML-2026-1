@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head><title>SIGAA - Sistema Integrado de Gestão de Atividades Acadêmicas</title></head>
+  <body>
+    <!-- Fragmento real sanitizado em 2026-07-10; opções de unidade não relacionadas foram removidas. -->
+    <form id="form" name="form" method="post"
+          action="/sigaa/public/componentes/busca_componentes.jsf"
+          enctype="application/x-www-form-urlencoded">
+      <input type="hidden" name="form" value="form" />
+      <table>
+        <tr>
+          <td width="3%"></td>
+          <td width="25%">Nível de Ensino:</td>
+          <td>
+            <select id="form:nivel" name="form:nivel" size="1">
+              <option value="F">FORMAÇÃO COMPLEMENTAR</option>
+              <option value="G">GRADUAÇÃO</option>
+              <option value="L">LATO SENSU - ESPECIALIZAÇÃO</option>
+              <option value="R">LATO SENSU - RESIDÊNCIA</option>
+              <option value="S">STRICTO SENSU</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td><input class="noborder" id="form:checkTipo" name="form:checkTipo" type="checkbox" /></td>
+          <td>Tipo do Componente:</td>
+          <td>
+            <select id="form:tipo" name="form:tipo">
+              <option selected="selected" value="0">-- SELECIONE --</option>
+              <option value="2">DISCIPLINA</option>
+              <option value="1">ATIVIDADE</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td><input class="noborder" id="form:checkCodigo" name="form:checkCodigo" type="checkbox" /></td>
+          <td>Código do Componente:</td>
+          <td>
+            <input name="form:j_id_jsp_190531263_11" onchange="marcar('form:checkCodigo');" type="text" />
+            <span class="info"> (Ex. MAT0311)</span>
+          </td>
+        </tr>
+        <tr>
+          <td><input class="noborder" id="form:checkNome" name="form:checkNome" type="checkbox" /></td>
+          <td>Nome do Componente:</td>
+          <td><input name="form:j_id_jsp_190531263_13" onchange="marcar('form:checkNome');" type="text" /></td>
+        </tr>
+        <tr>
+          <td><input class="noborder" id="form:checkUnidade" name="form:checkUnidade" type="checkbox" /></td>
+          <td>Unidade Responsável:</td>
+          <td>
+            <select id="form:unidades" name="form:unidades">
+              <option selected="selected" value="0">-- SELECIONE UMA UNIDADE ACADÊMICA --</option>
+              <option value="673">CAMPUS UNB GAMA: FACULDADE DE CIÊNCIAS E TECNOLOGIAS EM ENGENHARIA</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="3">
+            <input id="form:btnBuscarComponentes" name="form:btnBuscarComponentes"
+                   type="submit" value="Buscar Componentes" />
+            <input id="form:btnCancelarBuscarComponentes" name="form:btnCancelarBuscarComponentes"
+                   type="submit" value="Cancelar" />
+          </td>
+        </tr>
+      </table>
+      <input id="javax.faces.ViewState" name="javax.faces.ViewState" type="hidden" value="j_id1" />
+    </form>
+  </body>
+</html>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+  <body>
+    <!-- Derivada do formulário real para provar que os IDs dinâmicos não são fixos. -->
+    <form id="form" name="form" method="post"
+          action="/sigaa/public/componentes/busca_componentes.jsf"
+          enctype="application/x-www-form-urlencoded">
+      <input type="hidden" name="form" value="form" />
+      <table>
+        <tr>
+          <td></td><td>Nível de Ensino:</td>
+          <td>
+            <select id="form:nivel" name="form:nivel">
+              <option value="F">FORMAÇÃO COMPLEMENTAR</option>
+              <option value="G">GRADUAÇÃO</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td><input id="form:checkCodigo" name="form:checkCodigo" type="checkbox" value="codigo-real" /></td>
+          <td>Código do Componente:</td>
+          <td><input name="form:j_id_jsp_777777777_21" type="text" /></td>
+        </tr>
+        <tr>
+          <td><input id="form:checkNome" name="form:checkNome" type="checkbox" value="nome-real" /></td>
+          <td>Nome do Componente:</td>
+          <td><input name="form:j_id_jsp_777777777_23" type="text" /></td>
+        </tr>
+        <tr>
+          <td></td><td>Tipo do Componente:</td>
+          <td><select id="form:tipo" name="form:tipo"><option selected value="0">-- SELECIONE --</option></select></td>
+        </tr>
+        <tr>
+          <td><input id="form:checkUnidade" name="form:checkUnidade" type="checkbox" /></td>
+          <td>Unidade Responsável:</td>
+          <td><select id="form:unidades" name="form:unidades"><option selected value="0">-- SELECIONE --</option></select></td>
+        </tr>
+      </table>
+      <input name="form:btnBuscarComponentes" type="submit" value="Buscar Componentes" />
+      <input name="javax.faces.ViewState" type="hidden" value="j_id1" />
+    </form>
+  </body>
+</html>

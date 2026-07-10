@@ -1,19 +1,26 @@
 <!doctype html>
 <html lang="pt-BR">
+  <head><title>SIGAA - Sistema Integrado de Gestão de Atividades Acadêmicas</title></head>
   <body>
-    <table id="componentes">
+    <!-- Tabela real sanitizada da busca por FGA0315 em 2026-07-10. -->
+    <table class="listagem">
       <tr>
-        <th>Código</th><th>Nome</th><th>Tipo</th><th>Unidade</th><th>Carga Horária</th>
+        <th>Código</th>
+        <th style="width: 70%;">Nome</th>
+        <th>Tipo</th>
+        <th>CH Total</th>
+        <th></th>
       </tr>
-      <tr data-component-code="FGA0315" data-component-name="QUALIDADE DE SOFTWARE 1" data-component-type="DISCIPLINA" data-component-unit="FCTE" data-component-workload="60">
+      <tr class="linhaPar">
         <td>FGA0315</td>
-        <td><a href="/sigaa/public/componentes/detalhes.jsf?id=1">QUALIDADE DE SOFTWARE 1</a></td>
+        <td>QUALIDADE DE SOFTWARE 1</td>
         <td>DISCIPLINA</td>
-        <td>FCTE</td>
-        <td>60</td>
+        <td>60h</td>
+        <td>
+          <a href="#" onclick="jsfcljs(document.getElementById('formListagemComponentes'), {'id':'180378'}, ''); return false"
+             title="Detalhes do Componente Curricular">Detalhes</a>
+        </td>
       </tr>
     </table>
-    <div>Ementa: Fundamentos de qualidade de software, medição e melhoria de processo.</div>
-    <div>Programa atual: Conceitos, modelos de qualidade, métricas e revisão.</div>
   </body>
 </html>
