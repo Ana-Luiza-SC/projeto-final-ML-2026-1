@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createStudyPlan, listDisciplines } from "../api/client";
 import type { Discipline, StudyPlanDay, StudyPlanResponse, StudyPlanTimeWindow } from "../types";
+import { EmptyState, PageHeader, StatusBadge } from "../components/ui";
 
 const DAYS: { value: StudyPlanDay; label: string }[] = [
   { value: "monday", label: "Segunda" },
@@ -120,11 +121,7 @@ export function StudyPlanPage() {
 
   return (
     <div className="page study-plan-page">
-      <section className="page-heading">
-        <p className="eyebrow">Planejamento semanal</p>
-        <h1>Plano de estudos</h1>
-        <p>Selecione disciplinas cadastradas e distribua a disponibilidade semanal em sessões de estudo.</p>
-      </section>
+      <PageHeader eyebrow="Planejamento semanal" title="Plano de estudos" description="Escolha suas disciplinas e organize a disponibilidade em sessões possíveis de cumprir." />
 
       {error && <p className="message error">{error}</p>}
 
@@ -230,9 +227,10 @@ export function StudyPlanPage() {
         <section className="panel study-plan-result">
           <div className="panel-heading">
             <h2>Plano gerado</h2>
-            <p>{plan ? (plan.source === "llm_assisted" ? "Explicação assistida por IA validada." : "Fallback determinístico em uso.") : "Nenhum plano gerado ainda."}</p>
+            <p>{plan ? (plan.source === "llm_assisted" ? "Plano personalizado com assistência de IA." : "Plano criado com as regras acadêmicas disponíveis.") : "Nenhum plano gerado ainda."}</p>
           </div>
 
+          {!plan && !loadingPlan && <EmptyState title="Seu plano aparecerá aqui" description="Selecione as disciplinas, informe sua disponibilidade e gere uma proposta para esta semana." />}
           {loadingPlan && <p className="message muted">Gerando plano semanal...</p>}
           {plan && (
             <div className="study-plan-output">
@@ -240,7 +238,7 @@ export function StudyPlanPage() {
               <div className="metrics-grid">
                 <div><span>Minutos alocados</span><strong>{plan.metrics.allocated_minutes}</strong></div>
                 <div><span>Sessões</span><strong>{plan.metrics.session_count}</strong></div>
-                <div><span>Origem</span><strong>{plan.source === "llm_assisted" ? "IA validada" : "Fallback"}</strong></div>
+                <div><span>Método</span><strong>{plan.source === "llm_assisted" ? "Assistido" : "Regras acadêmicas"}</strong></div>
               </div>
               {plan.warnings.length > 0 && (
                 <div className="warnings">

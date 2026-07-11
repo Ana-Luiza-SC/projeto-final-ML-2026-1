@@ -29,8 +29,8 @@ MAX_PAGES = int(os.getenv("MATRICULA_IMPORT_MAX_PAGES", "30"))
 PREVIEW_TTL_MINUTES = int(os.getenv("MATRICULA_IMPORT_TTL_MINUTES", "15"))
 MAX_ITEMS = 50
 
-# Padrão de código curricular da UnB: 2-5 letras + 4 dígitos
-CODE_RE = re.compile(r"\b([A-Z]{2,5}\d{4})\b")
+# Código de componente usado como âncora dos registros do comprovante.
+CODE_RE = re.compile(r"\b([A-Z]{3}\d{4})\b")
 # Padrão de código de horário do SIGAA: dígitos de dias + M/T/N + dígitos de slots
 SCHEDULE_RE = re.compile(r"\b([2-7]{1,6}[MTN]\d{1,6})\b", re.IGNORECASE)
 
@@ -127,17 +127,12 @@ def normalize_name_for_compare(value: str | None) -> str | None:
     return without_accents.casefold()
 
 
-def _remove_replacement_chars(value: str) -> str:
-    """Remove caracteres de substituição Unicode (\ufffd) que surgem de fontes mapeadas do PDF.
-    Não faz outras conversões arbitrárias de encode/decode."""
-    return value.replace("\ufffd", "")
-
 
 def _extract_schedule_code(cell: str | None) -> str | None:
     """Extrai o código de horário (ex: '24T45') da célula de horário, descartando datas."""
     if not cell:
         return None
-    cell_clean = _remove_replacement_chars(cell)
+    cell_clean = cell
     match = SCHEDULE_RE.search(cell_clean)
     return match.group(1).upper() if match else None
 
@@ -266,10 +261,15 @@ def _parse_table_row(
     # Extrai código de horário
     schedule_code = _extract_schedule_code(schedule_raw)
 
+    if name and "\ufffd" in name:
+        name = None
+        warnings.append("Nome contem caractere corrompido; corrija o campo antes de confirmar.")
     if not name:
         warnings.append("Nome da disciplina nao foi identificado com confianca.")
 
     item_type = "activity" if is_activity else "discipline"
+    if item_type == "discipline" and "TIPO: DISCIPLINA" not in component_raw.upper():
+        warnings.append("Tipo DISCIPLINA nao identificado no registro.")
 
     if item_type == "discipline":
         if not name:
@@ -387,6 +387,9 @@ def _candidate_from_text_line(line: str) -> ExtractedCandidate | None:
             name_tokens.append(token)
     name = normalize_display_text(" ".join(name_tokens))
     warnings = []
+    if name and "\ufffd" in name:
+        name = None
+        warnings.append("Nome contem caractere corrompido; corrija o campo antes de confirmar.")
     if not name:
         warnings.append("Nome da disciplina nao foi identificado com confianca.")
         return ExtractedCandidate("discipline", code, None, class_code, schedule_code, None, "low", tuple(warnings))
@@ -407,7 +410,7 @@ def extract_candidates_from_text(text: str) -> list[ExtractedCandidate]:
     """Fallback: extrai candidatos de texto plano quando tabelas não estão disponíveis."""
     candidates: list[ExtractedCandidate] = []
     # Separa em blocos por código curricular
-    blocks = re.split(r"(?=\b[A-Z]{2,5}\d{4}\b)", text)
+    blocks = re.split(r"(?=\b[A-Z]{3}\d{4}\b)", text)
     for block in blocks:
         block = block.strip()
         if not block:
@@ -523,6 +526,8 @@ def _status_for_candidate(candidate: ExtractedCandidate, seen_codes: set[str]) -
     if code and storage.find_discipline_by_code(code):
         return "duplicate", False, warnings + ["Disciplina ja cadastrada."]
     if not code or not candidate.name:
+        return "ambiguous", False, warnings
+    if candidate.confidence == "low":
         return "ambiguous", False, warnings
     return "recognized", True, warnings
 

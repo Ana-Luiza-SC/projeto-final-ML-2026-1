@@ -103,7 +103,7 @@ Não implementar nesta fatia:
 - importação automática de atividades acadêmicas como disciplinas;
 - confirmação automática após upload;
 - processamento de múltiplos PDFs na mesma requisição;
-- OCR obrigatório para PDFs puramente escaneados;
+- OCR como caminho principal ou aplicado quando a camada textual já for utilizável;
 - sincronização contínua com o SIGAA;
 - mudança do contrato dos endpoints existentes;
 - novo banco de dados ou framework de parsing sem necessidade concreta.
@@ -174,7 +174,7 @@ Retornar `422` com mensagem amigável e código de erro estável. Não iniciar e
 
 ### A2 — PDF válido, mas sem texto extraível
 
-Retornar uma pré-visualização com `status: extraction_failed` ou erro controlado, sem stack trace. Informar que o cadastro manual é a alternativa. O OCR fica fora do MVP.
+Tentar OCR somente como fallback quando o PDF não possuir camada textual utilizável. Se o OCR não estiver disponível ou também não produzir conteúdo confiável, retornar erro controlado sem stack trace e informar o cadastro manual como alternativa.
 
 ### A3 — Nenhuma disciplina reconhecida
 
@@ -398,9 +398,11 @@ Validações mínimas:
 - Usar biblioteca já presente ou aprovada pelo projeto, como `pdfplumber` ou `PyMuPDF`.
 - Processar páginas localmente no backend.
 - Priorizar a tabela principal de componentes, associando colunas de código, componente/docente, turma, status e horário.
-- Usar a tabela semanal apenas para complementar códigos de horário quando a associação for confiável.
-- Tratar cabeçalhos, rodapés e linhas repetidas como ruído.
-- Não usar OCR neste MVP; PDF escaneado sem camada textual deve produzir erro amigável.
+- Usar o código de componente, no padrão `[A-Z]{3}\d{4}`, como âncora primária e segmentar o texto entre um código e o código seguinte.
+- Reconstruir nomes quebrados em múltiplas linhas dentro do bloco, sem incorporar docente, status ou metadados.
+- Validar disciplinas regulares pela presença de `Tipo: DISCIPLINA`; monitoria, orientação e outras atividades devem seguir como itens separados e não selecionáveis.
+- Excluir cabeçalhos, rodapés, texto de autenticação e a tabela semanal de horários da criação de candidatos.
+- Aplicar OCR somente como fallback para PDF sem camada textual utilizável; indisponibilidade ou baixa confiança deve produzir erro amigável e cadastro manual.
 
 ### Candidatos
 

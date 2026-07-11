@@ -2,6 +2,7 @@
 .env.local
 *.key
 backend/app/cache/*.json
+/venv
 
 # Dados pessoais e uploads — nunca commitar
 *.pdf

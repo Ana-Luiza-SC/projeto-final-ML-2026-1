@@ -18,6 +18,7 @@ const initialForm: DisciplineCreatePayload = {
 
 export function DisciplineForm({ loading = false, onSubmit }: Props) {
   const [form, setForm] = useState<DisciplineCreatePayload>(initialForm);
+  const [mode, setMode] = useState<"sigaa" | "manual">("sigaa");
   const [error, setError] = useState<string | null>(null);
   const [sigaaQuery, setSigaaQuery] = useState("");
   const [sigaaLoading, setSigaaLoading] = useState(false);
@@ -75,11 +76,13 @@ export function DisciplineForm({ loading = false, onSubmit }: Props) {
       workload_hours: component.workload_hours ?? null,
     }));
     setError(null);
+    setMode("manual");
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setMode("manual");
     if (!form.code.trim()) {
       setError("Código da disciplina é obrigatório.");
       return;
@@ -117,6 +120,11 @@ export function DisciplineForm({ loading = false, onSubmit }: Props) {
         <p>Busque dados públicos do SIGAA ou preencha manualmente se a fonte não encontrar o componente.</p>
       </div>
 
+      <div className="segmented-control" role="tablist" aria-label="Forma de cadastro">
+        <button type="button" role="tab" aria-selected={mode === "sigaa"} className={mode === "sigaa" ? "active" : ""} onClick={() => setMode("sigaa")}>Buscar no SIGAA</button>
+        <button type="button" role="tab" aria-selected={mode === "manual"} className={mode === "manual" ? "active" : ""} onClick={() => setMode("manual")}>Preencher manualmente</button>
+      </div>
+      {mode === "sigaa" && (
       <section className="sigaa-assisted-search" aria-label="Busca assistida no SIGAA">
         <label>
           Buscar no SIGAA por código ou nome
@@ -183,7 +191,9 @@ export function DisciplineForm({ loading = false, onSubmit }: Props) {
           </div>
         )}
       </section>
+      )}
 
+      {mode === "manual" && (<div className="manual-fields">
       {error && <p className="message error">{error}</p>}
       <label>
         Código *
@@ -209,6 +219,7 @@ export function DisciplineForm({ loading = false, onSubmit }: Props) {
         Local
         <input value={form.local ?? ""} onChange={(event) => updateField("local", event.target.value)} placeholder="Sala" />
       </label>
+      </div>)}
       <div className="form-actions">
         <button type="submit" disabled={loading}>{loading ? "Salvando..." : "Cadastrar disciplina"}</button>
       </div>

@@ -4,6 +4,7 @@ import { DisciplinesPage } from "./pages/DisciplinesPage";
 import { DisciplineDetailPage } from "./pages/DisciplineDetailPage";
 import { StudyPlanPage } from "./pages/StudyPlanPage";
 import { MatriculaImportPage } from "./pages/MatriculaImportPage";
+import { AppShell } from "./components/AppShell";
 
 type Route = { page: "home" } | { page: "disciplines" } | { page: "discipline"; id: string } | { page: "study-plan" } | { page: "matricula-import" };
 
@@ -49,17 +50,7 @@ export default function App() {
   );
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <button className="brand-button" onClick={navigation.goHome}>EstudaUnB</button>
-        <nav>
-          <button onClick={navigation.goDisciplines}>Disciplinas</button>
-          <button onClick={navigation.goStudyPlan}>Planejamento</button>
-          <button onClick={navigation.goMatriculaImport}>Importar PDF</button>
-          <a href="http://localhost:8000/docs" target="_blank" rel="noreferrer">Swagger</a>
-        </nav>
-      </header>
-      <main>
+    <AppShell activePage={route.page} onNavigate={(page) => setHash({ page })}>
         {route.page === "home" && <HomePage onOpenDisciplines={navigation.goDisciplines} onOpenMatriculaImport={navigation.goMatriculaImport} />}
         {route.page === "disciplines" && <DisciplinesPage onOpenDiscipline={navigation.goDiscipline} />}
         {route.page === "discipline" && (
@@ -67,7 +58,6 @@ export default function App() {
         )}
         {route.page === "study-plan" && <StudyPlanPage />}
         {route.page === "matricula-import" && <MatriculaImportPage onOpenDisciplines={navigation.goDisciplines} />}
-      </main>
-    </div>
+    </AppShell>
   );
 }
