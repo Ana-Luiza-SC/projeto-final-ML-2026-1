@@ -12,3 +12,8 @@ backend/app/cache/*.json
 uploads/
 backend/app/data/
 
+
+# Ambientes virtuais Python
+venv/
+.venv/
+backend/venv/
