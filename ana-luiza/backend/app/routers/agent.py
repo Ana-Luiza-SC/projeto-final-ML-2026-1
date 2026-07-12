@@ -17,6 +17,28 @@ NOT_FOUND_RESPONSE = {"description": "Disciplina não encontrada."}
 VALIDATION_RESPONSE = {"description": "Entrada inválida ou pedido fora do escopo acadêmico."}
 
 
+
+def _attendance_from_absences(discipline_id, discipline: dict) -> dict:
+    workload = discipline.get("workload_hours") or discipline.get("total_class_hours")
+    missed = sum(float(item["class_hours"]) for item in storage.list_absences(str(discipline_id)))
+    if workload is not None:
+        workload = float(workload)
+        if workload <= 0:
+            raise ValueError("Carga horária deve ser positiva.")
+        if missed > workload:
+            raise ValueError("Faltas não podem superar a carga horária.")
+        absence_percentage = missed / workload
+        risk = "high" if absence_percentage > 0.25 else "medium" if absence_percentage > 0.15 else "low"
+        status = "risk_of_failure_by_attendance" if risk == "high" else "attention" if risk == "medium" else "ok"
+        warnings = ["Frequência abaixo de 75%; há risco de reprovação por falta."] if risk == "high" else ["Faltas próximas do limite de 25%."] if risk == "medium" else []
+        return {"status": status, "source": "absence_occurrences", "frequency": 1 - absence_percentage, "absence_percentage": absence_percentage, "risk_level": risk, "warnings": warnings}
+    return calculate_attendance(
+        total_classes=discipline.get("total_classes"),
+        missed_classes=discipline.get("missed_classes"),
+        total_class_hours=discipline.get("total_class_hours"),
+        missed_class_hours=discipline.get("missed_class_hours"),
+    )
+
 def _is_forbidden_goal(user_goal: str | None) -> bool:
     if not user_goal:
         return False
@@ -54,12 +76,7 @@ def study_recommendation(payload: StudyRecommendationRequest) -> StudyRecommenda
     assessments = storage.list_assessments(str(payload.discipline_id))
     try:
         grade_result = calculate_grade_simulation(assessments, payload.target_average)
-        attendance = calculate_attendance(
-            total_classes=discipline.get("total_classes"),
-            missed_classes=discipline.get("missed_classes"),
-            total_class_hours=discipline.get("total_class_hours"),
-            missed_class_hours=discipline.get("missed_class_hours"),
-        )
+        attendance = _attendance_from_absences(payload.discipline_id, discipline)
         academic_status = classify_academic_status(grade_result, attendance)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -77,8 +94,14 @@ def study_recommendation(payload: StudyRecommendationRequest) -> StudyRecommenda
         "academic_status": academic_status,
         "warnings": warnings,
     }
+    enriched_discipline = {
+        **discipline,
+        "assessments": assessments,
+        "course_plan": storage.COURSE_PLANS.get(str(payload.discipline_id)),
+        "absence_occurrences": storage.list_absences(str(payload.discipline_id)),
+    }
     return generate_study_recommendation(
-        discipline=discipline,
+        discipline=enriched_discipline,
         simulation=simulation,
         pending_topics=payload.pending_topics,
         user_goal=payload.user_goal,

@@ -26,6 +26,28 @@ VALIDATION_RESPONSE = {"description": "Entrada inválida, como nota fora de 0 a 
 INSUFFICIENT_DATA_RESPONSE = {"description": "Dados insuficientes para simulação completa; a resposta inclui warnings."}
 
 
+
+def _attendance_from_absences(discipline_id: UUID, discipline: dict) -> dict:
+    workload = discipline.get("workload_hours") or discipline.get("total_class_hours")
+    missed = sum(float(item["class_hours"]) for item in storage.list_absences(str(discipline_id)))
+    if workload is not None:
+        workload = float(workload)
+        if workload <= 0:
+            raise ValueError("Carga horária deve ser positiva.")
+        if missed > workload:
+            raise ValueError("Faltas não podem superar a carga horária.")
+        absence_percentage = missed / workload
+        risk = "high" if absence_percentage > 0.25 else "medium" if absence_percentage > 0.15 else "low"
+        status = "risk_of_failure_by_attendance" if risk == "high" else "attention" if risk == "medium" else "ok"
+        warnings = ["Frequência abaixo de 75%; há risco de reprovação por falta."] if risk == "high" else ["Faltas próximas do limite de 25%."] if risk == "medium" else []
+        return {"status": status, "source": "absence_occurrences", "frequency": 1 - absence_percentage, "absence_percentage": absence_percentage, "risk_level": risk, "warnings": warnings}
+    return calculate_attendance(
+        total_classes=discipline.get("total_classes"),
+        missed_classes=discipline.get("missed_classes"),
+        total_class_hours=discipline.get("total_class_hours"),
+        missed_class_hours=discipline.get("missed_class_hours"),
+    )
+
 def _ensure_discipline(discipline_id: UUID) -> dict:
     discipline = storage.get_discipline(str(discipline_id))
     if discipline is None:
@@ -136,23 +158,12 @@ def academic_simulation(
     assessments = storage.list_assessments(str(discipline_id))
     try:
         grade_result = calculate_grade_simulation(assessments, target_average)
-        attendance = calculate_attendance(
-            total_classes=discipline.get("total_classes"),
-            missed_classes=discipline.get("missed_classes"),
-            total_class_hours=discipline.get("total_class_hours"),
-            missed_class_hours=discipline.get("missed_class_hours"),
-        )
+        attendance = _attendance_from_absences(discipline_id, discipline)
         academic_status = classify_academic_status(grade_result, attendance)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    warnings = list(
-        dict.fromkeys(
-            grade_result["warnings"]
-            + attendance["warnings"]
-            + academic_status["warnings"]
-        )
-    )
+    warnings = grade_result["warnings"]
     return {
         **grade_result,
         "attendance": attendance,

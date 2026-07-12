@@ -1,93 +1,32 @@
 import type { AcademicSimulation } from "../types";
 
-type Props = {
-  simulation: AcademicSimulation | null;
-  loading?: boolean;
-  error?: string | null;
-};
-
-function formatNumber(value?: number | null, digits = 2) {
-  if (value == null || Number.isNaN(value)) return "Dados insuficientes";
-  return value.toLocaleString("pt-BR", { maximumFractionDigits: digits, minimumFractionDigits: digits });
-}
-
-function formatPercent(value?: number | null) {
-  if (value == null || Number.isNaN(value)) return "Não informado";
-  return `${(value * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
-}
-
-function labelRisk(value?: string | null) {
-  if (!value) return "Não avaliado";
-  const labels: Record<string, string> = {
-    low: "baixo",
-    medium: "médio",
-    high: "alto",
-    unknown: "desconhecido",
-  };
-  return labels[value] ?? value;
-}
+type Props = { simulation: AcademicSimulation | null; loading?: boolean; error?: string | null };
+const number = (value?: number | null) => value == null ? "Não calculado" : value.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+const percentage = (value?: number | null) => value == null ? "Não calculado" : `${(value * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+const risk: Record<string, string> = { low: "Baixo", medium: "Médio", high: "Alto", unknown: "Não calculado" };
 
 export function AcademicSimulationPanel({ simulation, loading = false, error = null }: Props) {
-  const attendance = simulation?.attendance ?? null;
-  const academicStatus = simulation?.academic_status ?? null;
-  const warnings = Array.from(new Set([...(simulation?.warnings ?? []), ...(attendance?.warnings ?? []), ...(academicStatus?.warnings ?? [])]));
-  const reasons = simulation?.reasons ?? [];
-  const hasUnknownAttendance = attendance?.status === "unknown" || attendance?.frequency == null;
-  const hasPendingAssessments = (simulation?.remaining_weight ?? 0) > 0;
-
-  return (
-    <section className="panel simulation-panel">
-      <div className="panel-heading">
-        <h2>Situação simulada</h2>
-        <p>A simulação não substitui o resultado oficial do SIGAA.</p>
+  const warnings = Array.from(new Set(simulation?.warnings ?? []));
+  return <section className="panel simulation-panel">
+    <div className="panel-heading"><h2>Simulação por nota</h2><p>Projeção acadêmica; frequência é analisada na aba própria.</p></div>
+    {loading && <p className="message muted">Calculando...</p>}{error && <p className="message error">{error}</p>}
+    {!simulation && !loading && <p className="message muted">Cadastre avaliações para iniciar a simulação.</p>}
+    {simulation && <>
+      <div className="simulation-summary">
+        <div><span>Média parcial</span><strong>{number(simulation.partial_average)}</strong></div>
+        <div><span>Peso concluído</span><strong>{percentage(simulation.completed_weight)}</strong></div>
+        <div><span>Peso restante</span><strong>{percentage(simulation.remaining_weight)}</strong></div>
+        <div><span>Nota necessária</span><strong>{number(simulation.required_average_on_remaining)}</strong></div>
       </div>
-      {loading && <p className="message muted">Calculando simulação...</p>}
-      {error && <p className="message error">{error}</p>}
-      {!simulation && !loading && !error && (
-        <p className="message muted">Cadastre ao menos uma avaliação para simular a menção. Informe frequência ou faltas para avaliar risco por falta.</p>
-      )}
-      {simulation && (
-        <>
-          <div className="metrics-grid">
-            <div><span>Contribuição atual</span><strong>{formatNumber(simulation.current_contribution)}</strong></div>
-            <div><span>Média parcial</span><strong>{formatNumber(simulation.partial_average)}</strong></div>
-            <div><span>Peso concluído</span><strong>{formatPercent(simulation.completed_weight)}</strong></div>
-            <div><span>Peso restante</span><strong>{formatPercent(simulation.remaining_weight)}</strong></div>
-            <div><span>Média alvo</span><strong>{formatNumber(simulation.target_average)}</strong></div>
-            <div><span>Nota necessária</span><strong>{formatNumber(simulation.required_average_on_remaining)}</strong></div>
-            <div><span>Menção atual</span><strong className="mention">{simulation.current_mention ?? "Dados insuficientes"}</strong></div>
-            <div><span>Menção projetada</span><strong className="mention">{simulation.projected_mention ?? "Dados insuficientes"}</strong></div>
-            <div><span>Risco por nota</span><strong>{labelRisk(simulation.grade_risk_level)}</strong></div>
-            <div><span>Frequência informada</span><strong>{formatPercent(attendance?.frequency)}</strong></div>
-            <div><span>Percentual de faltas</span><strong>{formatPercent(attendance?.absence_percentage)}</strong></div>
-            <div><span>Risco por falta</span><strong>{labelRisk(attendance?.risk_level)}</strong></div>
-          </div>
-
-          <div className="status-box">
-            <span>Status acadêmico</span>
-            <strong>{academicStatus?.message ?? "Dados insuficientes para conclusão final."}</strong>
-            {(hasUnknownAttendance || hasPendingAssessments) && (
-              <p>Dados insuficientes para conclusão final. Não há afirmação de aprovação definitiva.</p>
-            )}
-          </div>
-
-          {reasons.length > 0 && (
-            <div>
-              <h3>Reasons</h3>
-              <ul>{reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
-            </div>
-          )}
-
-          {warnings.length > 0 ? (
-            <div className="warnings">
-              <h3>Warnings</h3>
-              <ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
-            </div>
-          ) : (
-            <p className="message muted">Nenhum warning retornado pela simulação.</p>
-          )}
-        </>
-      )}
-    </section>
-  );
+      {warnings.length > 0 && <div className="warnings"><h3>Avisos</h3><ul>{warnings.map(item => <li key={item}>{item}</li>)}</ul></div>}
+      <details className="simulation-details"><summary>Ver cálculo completo</summary><dl>
+        <div><dt>Contribuição atual</dt><dd>{number(simulation.current_contribution)}</dd></div>
+        <div><dt>Média alvo</dt><dd>{number(simulation.target_average)}</dd></div>
+        <div><dt>Menção atual</dt><dd>{simulation.current_mention ?? "Não calculado"}</dd></div>
+        <div><dt>Menção projetada</dt><dd>{simulation.projected_mention ?? "Não calculado"}</dd></div>
+        <div><dt>Risco por nota</dt><dd>{risk[simulation.grade_risk_level ?? "unknown"] ?? "Não calculado"}</dd></div>
+      </dl></details>
+      {(simulation.group_results?.length ?? 0) > 0 && <div className="warnings"><h3>Resultados por grupo</h3><ul>{simulation.group_results?.map(group => <li key={group.code}><strong>{group.code} — {group.name}:</strong> {group.average == null ? "Dados insuficientes" : number(group.average) + " · mínimo 5: " + (group.meets_minimum_5 ? "atingido" : "não atingido")}</li>)}</ul><p>O resultado de cada grupo não representa aprovação final.</p></div>}
+    </>}
+  </section>;
 }

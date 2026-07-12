@@ -57,6 +57,18 @@ export function StudyRecommendationPanel({ recommendation, loading = false, erro
             <h3>Motivos</h3>
             <ul>{recommendation.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
           </div>
+          {(recommendation.used_evidence?.length ?? 0) > 0 && (
+            <div>
+              <h3>Evidências usadas</h3>
+              <ul>{recommendation.used_evidence?.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+          )}
+          {(recommendation.influencing_assessments?.length ?? 0) > 0 && (
+            <div>
+              <h3>Avaliações consideradas</h3>
+              <ul>{recommendation.influencing_assessments?.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+          )}
           {recommendation.missing_information.length > 0 && (
             <div>
               <h3>Informações ausentes</h3>

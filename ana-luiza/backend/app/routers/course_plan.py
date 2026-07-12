@@ -46,12 +46,21 @@ def confirm_course_plan(discipline_id: UUID, payload: CoursePlanConfirmRequest):
     preview = storage.COURSE_PLAN_PREVIEWS.get(str(payload.preview_id))
     if not preview or preview["discipline_id"] != str(discipline_id) or preview["expires_at"] <= storage.utc_now():
         raise HTTPException(404, "Pré-visualização expirada ou inexistente.")
+    if any(assessment.status == "requires_review" for assessment in payload.data.assessments):
+        raise HTTPException(422, "Revise avaliações incertas antes de confirmar o plano de ensino.")
+    storage.ASSESSMENTS[str(discipline_id)] = [
+        item for item in storage.list_assessments(str(discipline_id)) if item.get("source") != "course_plan"
+    ]
     record = storage.save_course_plan(str(discipline_id), payload.data.model_dump(mode="json"))
     for assessment in payload.data.assessments:
         if assessment.status == "recognized":
             storage.add_assessment(str(discipline_id), {
                 "name": assessment.name, "date": assessment.date, "weight": assessment.weight,
-                "grade": None, "topics": assessment.topics, "notes": None,
+                "grade": None, "topics": assessment.topics, "notes": assessment.description,
+                "code": assessment.code, "evaluation_group_code": assessment.group_code,
+                "evaluation_group_name": assessment.group_name, "group_final_weight": assessment.group_final_weight,
+                "group_weight": assessment.group_weight, "requires_date": assessment.date is None,
+                "description": assessment.description, "source_page": assessment.source_page,
                 "source": "course_plan", "status": "planned",
             })
     storage.COURSE_PLAN_PREVIEWS.pop(str(payload.preview_id), None)

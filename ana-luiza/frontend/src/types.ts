@@ -46,17 +46,55 @@ export type AttendancePayload = {
   missed_class_hours?: number | null;
 };
 
+export type AssessmentStatus = "planned" | "completed" | "cancelled";
+export type AssessmentSource = "manual" | "course_plan";
+
 export type AssessmentPayload = {
   name: string;
-  weight: number;
+  weight?: number | null;
   grade?: number | null;
   date?: string | null;
   topics?: string[];
+  notes?: string | null;
+  source?: AssessmentSource;
+  status?: AssessmentStatus;
+  code?: string | null;
+  evaluation_group_code?: string | null;
+  evaluation_group_name?: string | null;
+  group_final_weight?: number | null;
+  group_weight?: number | null;
+  requires_date?: boolean;
+  description?: string | null;
+  source_page?: number | null;
 };
 
 export type Assessment = AssessmentPayload & {
   id: string;
   discipline_id: string;
+  source: AssessmentSource;
+  status: AssessmentStatus;
+};
+
+export type AbsencePayload = {
+  date: string;
+  class_hours: number;
+  notes?: string | null;
+};
+
+export type Absence = AbsencePayload & {
+  id: string;
+  discipline_id: string;
+};
+
+export type AttendanceSummary = {
+  workload_class_hours?: number | null;
+  missed_class_hours: number;
+  absence_limit_class_hours?: number | null;
+  remaining_class_hours?: number | null;
+  frequency?: number | null;
+  absence_percentage?: number | null;
+  risk_level: "low" | "medium" | "high" | "unknown";
+  warnings: string[];
 };
 
 export type AttendanceResult = {
@@ -88,6 +126,7 @@ export type AcademicSimulation = {
   academic_status?: AcademicStatus | null;
   reasons?: string[];
   warnings?: string[];
+  group_results?: { code: string; name: string; average?: number | null; status: "calculated" | "insufficient_data"; meets_minimum_5?: boolean | null }[];
 };
 
 
@@ -108,6 +147,9 @@ export type StudyRecommendationRequest = {
   user_goal?: string | null;
 };
 
+export type AssistantMessage = { role: "user" | "assistant"; content: string; evidence?: string[]; suggested_actions?: string[]; warnings?: string[]; source?: "gemini" | "fallback" };
+export type DisciplineAssistantResponse = { status: "success"; source: "gemini" | "fallback"; answer: string; evidence: string[]; suggested_actions: string[]; warnings: string[] };
+
 export type StudyRecommendationResponse = {
   dedication_level: DedicationLevel;
   confidence: number;
@@ -120,6 +162,8 @@ export type StudyRecommendationResponse = {
   used_fallback: boolean;
   provider: "google" | "rules";
   latency_ms: number;
+  used_evidence?: string[];
+  influencing_assessments?: string[];
 };
 
 
@@ -189,7 +233,57 @@ export type StudyPlanResponse = {
     session_count: number;
     discipline_count: number;
   };
+  priority_influences?: {
+    discipline_id: string;
+    assessment_id?: string | null;
+    assessment_name: string;
+    assessment_date: string;
+    weight?: number | null;
+    bonus: number;
+    reason: string;
+  }[];
   request_id: string;
+};
+
+export type CoursePlanAssessment = {
+  name: string;
+  date?: string | null;
+  weight?: number | null;
+  topics: string[];
+  status: "recognized" | "requires_review";
+  code?: string | null;
+  group_code?: string | null;
+  group_name?: string | null;
+  group_final_weight?: number | null;
+  group_weight?: number | null;
+  requires_date?: boolean;
+  description?: string | null;
+  source_page?: number | null;
+};
+
+export type CoursePlanData = {
+  code?: string | null;
+  name?: string | null;
+  semester?: string | null;
+  workload_hours?: number | null;
+  term_weeks?: number | null;
+  objectives: string[];
+  contents: string[];
+  schedule: string[];
+  assessments: CoursePlanAssessment[];
+  evaluation_groups: { code: string; name: string; final_weight: number; items: { code?: string | null; name: string; group_weight?: number | null; date?: string | null; requires_date: boolean; description?: string | null; topics: string[]; source_page?: number | null; status: "recognized" | "requires_review" }[] }[];
+  bibliography: string[];
+};
+
+export type CoursePlanPreviewResponse = {
+  preview_id: string;
+  expires_at: string;
+  data: CoursePlanData;
+  warnings: string[];
+  source: "gemini" | "local_parser";
+  model?: string | null;
+  evaluation_group_count: number;
+  evaluation_component_count: number;
 };
 
 

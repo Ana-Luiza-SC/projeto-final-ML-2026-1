@@ -40,6 +40,7 @@ class RegisteredDiscipline:
     code: str
     name: str
     priority: int
+    priority_influences: list[dict[str, Any]]
 
 
 def _now_ms() -> float:
@@ -116,12 +117,26 @@ def list_registered_disciplines(
         record = records_by_id[str(discipline_id)]
         base_priority = priorities.get(str(discipline_id), 3)
         bonus = 0
+        priority_influences: list[dict[str, Any]] = []
         for assessment in record.get("assessments", []):
             if assessment.get("status") != "planned" or not assessment.get("date"):
                 continue
+            if assessment.get("weight") is None and not assessment.get("topics"):
+                continue
             assessment_date = assessment["date"] if isinstance(assessment["date"], date) else date.fromisoformat(str(assessment["date"]))
             days = (assessment_date - date.today()).days
-            bonus = max(bonus, 2 if 0 <= days <= 7 else 1 if 8 <= days <= 14 else 0)
+            assessment_bonus = 2 if 0 <= days <= 7 else 1 if 8 <= days <= 14 else 0
+            if assessment_bonus:
+                bonus = max(bonus, assessment_bonus)
+                priority_influences.append({
+                    "discipline_id": str(discipline_id),
+                    "assessment_id": assessment.get("id"),
+                    "assessment_name": _safe_text(assessment.get("name"), 120),
+                    "assessment_date": assessment_date,
+                    "weight": assessment.get("weight"),
+                    "bonus": assessment_bonus,
+                    "reason": "Avaliação confirmada em até 7 dias." if assessment_bonus == 2 else "Avaliação confirmada em 8 a 14 dias.",
+                })
         code = _safe_text(record.get("code"), 40)
         name = _safe_text(record.get("name"), 120)
         disciplines.append(
@@ -130,6 +145,7 @@ def list_registered_disciplines(
                 code=code,
                 name=name,
                 priority=min(5, base_priority + bonus),
+                priority_influences=priority_influences,
             )
         )
     return disciplines
@@ -456,7 +472,7 @@ def _build_llm_context(
     return {
         "discipline_ids": [discipline.id for discipline in disciplines],
         "disciplines": [
-            {"id": discipline.id, "code": discipline.code, "priority": discipline.priority}
+            {"id": discipline.id, "code": discipline.code, "priority": discipline.priority, "priority_influences": discipline.priority_influences}
             for discipline in disciplines
         ],
         "plan": [
@@ -536,6 +552,7 @@ def generate_study_plan(
             "plan": plan,
             "summary": summary,
             "warnings": warnings,
+            "priority_influences": [influence for discipline in disciplines for influence in discipline.priority_influences],
             "metrics": {
                 "requested_minutes": total_minutes,
                 "allocated_minutes": allocated,

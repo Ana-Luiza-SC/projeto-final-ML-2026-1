@@ -41,10 +41,14 @@ def normalize_assessments_weights(assessments: list[Any]) -> list[dict[str, Any]
         normalized.append(
             {
                 "name": _read_field(assessment, "name"),
-                "weight": normalize_weight(_read_field(assessment, "weight")) if _read_field(assessment, "weight") is not None else None,
+                "weight": (normalize_weight(_read_field(assessment, "group_final_weight")) * normalize_weight(_read_field(assessment, "group_weight"))) if _read_field(assessment, "group_final_weight") is not None and _read_field(assessment, "group_weight") is not None else (normalize_weight(_read_field(assessment, "weight")) if _read_field(assessment, "weight") is not None else None),
                 "grade": validate_grade(grade) if grade is not None else None,
                 "date": _read_field(assessment, "date"),
                 "topics": _read_field(assessment, "topics") or [],
+                "group_code": _read_field(assessment, "evaluation_group_code") or _read_field(assessment, "group_code"),
+                "group_name": _read_field(assessment, "evaluation_group_name") or _read_field(assessment, "group_name"),
+                "group_final_weight": normalize_weight(_read_field(assessment, "group_final_weight")) if _read_field(assessment, "group_final_weight") is not None else None,
+                "group_weight": normalize_weight(_read_field(assessment, "group_weight")) if _read_field(assessment, "group_weight") is not None else None,
             }
         )
     return normalized
@@ -104,6 +108,16 @@ def calculate_grade_simulation(
                 "Meta inalcançável apenas com as avaliações restantes."
             )
 
+    group_results = []
+    group_codes = list(dict.fromkeys(item["group_code"] for item in normalized if item.get("group_code")))
+    for group_code in group_codes:
+        items = [item for item in normalized if item.get("group_code") == group_code]
+        graded = [item for item in items if item["grade"] is not None and item.get("group_weight") is not None]
+        complete = len(graded) == len(items) and bool(items)
+        internal_weight = sum(item.get("group_weight") or 0 for item in graded)
+        group_average = sum(item["grade"] * item["group_weight"] for item in graded) / internal_weight if complete and internal_weight else None
+        group_results.append({"code": group_code, "name": items[0].get("group_name") or group_code, "average": group_average, "status": "calculated" if group_average is not None else "insufficient_data", "meets_minimum_5": group_average >= 5 if group_average is not None else None})
+
     current_mention = grade_to_mention(partial_average) if partial_average is not None else None
     if remaining_weight == 0:
         projected_average = min(10.0, max(0.0, current_contribution))
@@ -126,6 +140,7 @@ def calculate_grade_simulation(
         "projected_mention": projected_mention,
         "grade_risk_level": classify_grade_risk(required_average_on_remaining),
         "warnings": warnings,
+        "group_results": group_results,
     }
 
 

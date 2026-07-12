@@ -4,9 +4,17 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Response
 
 from app import storage
-from app.schemas import AbsenceCreate, AbsenceRead, AssessmentRead, AssessmentUpdate, AttendanceSummary
+from app.schemas import AbsenceCreate, AbsenceRead, AssessmentCompleteRequest, AssessmentRead, AssessmentUpdate, AttendanceSummary
 
 router = APIRouter(prefix="/api/disciplines/{discipline_id}", tags=["academic-records"])
+
+
+
+def _validate_assessment_state(payload: dict) -> None:
+    if payload.get("status") == "planned" and payload.get("grade") is not None:
+        raise HTTPException(422, "Avaliação planejada não pode ter nota.")
+    if payload.get("status") == "completed" and payload.get("grade") is None:
+        raise HTTPException(422, "Avaliação realizada exige nota.")
 
 
 def ensure(discipline_id: UUID) -> dict:
@@ -28,12 +36,28 @@ def update_assessment(discipline_id: UUID, assessment_id: UUID, payload: Assessm
     current = storage.get_assessment(str(discipline_id), str(assessment_id))
     if current is None:
         raise HTTPException(404, "Avaliação não encontrada.")
-    merged = {**current, **payload.model_dump(exclude_unset=True)}
-    if merged.get("status") == "planned" and merged.get("grade") is not None:
-        raise HTTPException(422, "Avaliação planejada não pode ter nota.")
-    if merged.get("status") == "completed" and merged.get("grade") is None:
-        raise HTTPException(422, "Avaliação realizada exige nota.")
-    return storage.update_assessment(str(discipline_id), str(assessment_id), payload.model_dump(exclude_unset=True))
+    updates = payload.model_dump(exclude_unset=True)
+    merged = {**current, **updates}
+    _validate_assessment_state(merged)
+    return storage.update_assessment(str(discipline_id), str(assessment_id), updates)
+
+
+@router.post("/assessments/{assessment_id}/complete", response_model=AssessmentRead)
+def complete_assessment(discipline_id: UUID, assessment_id: UUID, payload: AssessmentCompleteRequest):
+    ensure(discipline_id)
+    current = storage.get_assessment(str(discipline_id), str(assessment_id))
+    if current is None:
+        raise HTTPException(404, "Avaliação não encontrada.")
+    updates = payload.model_dump(exclude_unset=True)
+    updates["status"] = "completed"
+    merged = {**current, **updates}
+    _validate_assessment_state(merged)
+    return storage.update_assessment(str(discipline_id), str(assessment_id), updates)
+
+
+@router.post("/assessments/{assessment_id}/grade", response_model=AssessmentRead)
+def add_assessment_grade(discipline_id: UUID, assessment_id: UUID, payload: AssessmentCompleteRequest):
+    return complete_assessment(discipline_id, assessment_id, payload)
 
 
 @router.delete("/assessments/{assessment_id}", status_code=204)

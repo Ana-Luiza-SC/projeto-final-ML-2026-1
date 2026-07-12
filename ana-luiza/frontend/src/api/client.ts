@@ -1,9 +1,16 @@
 import type {
   AcademicSimulation,
+  AssistantMessage,
+  DisciplineAssistantResponse,
   ApiHealth,
+  Absence,
+  AbsencePayload,
   Assessment,
   AssessmentPayload,
   AttendancePayload,
+  AttendanceSummary,
+  CoursePlanData,
+  CoursePlanPreviewResponse,
   Discipline,
   DisciplineCreatePayload,
   SigaaComponent,
@@ -125,6 +132,75 @@ export function createAssessment(id: string, payload: AssessmentPayload) {
   });
 }
 
+export function listAssessments(id: string) {
+  return request<Assessment[]>(`/api/disciplines/${id}/assessments`);
+}
+
+export function updateAssessment(id: string, assessmentId: string, payload: Partial<AssessmentPayload>) {
+  return request<Assessment>(`/api/disciplines/${id}/assessments/${assessmentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function completeAssessment(id: string, assessmentId: string, payload: { grade: number; date?: string | null; topics?: string[]; notes?: string | null }) {
+  return request<Assessment>(`/api/disciplines/${id}/assessments/${assessmentId}/complete`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAssessment(id: string, assessmentId: string) {
+  return request<unknown>(`/api/disciplines/${id}/assessments/${assessmentId}`, { method: "DELETE" });
+}
+
+export function listAbsences(id: string) {
+  return request<Absence[]>(`/api/disciplines/${id}/absences`);
+}
+
+export function createAbsence(id: string, payload: AbsencePayload) {
+  return request<Absence>(`/api/disciplines/${id}/absences`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAbsence(id: string, absenceId: string, payload: AbsencePayload) {
+  return request<Absence>(`/api/disciplines/${id}/absences/${absenceId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAbsence(id: string, absenceId: string) {
+  return request<unknown>(`/api/disciplines/${id}/absences/${absenceId}`, { method: "DELETE" });
+}
+
+export function getAttendanceSummary(id: string) {
+  return request<AttendanceSummary>(`/api/disciplines/${id}/attendance-summary`);
+}
+
+export function getCoursePlan(id: string) {
+  return request<CoursePlanData | null>(`/api/disciplines/${id}/course-plan`);
+}
+
+export function previewCoursePlan(id: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return requestForm<CoursePlanPreviewResponse>(`/api/disciplines/${id}/course-plan/preview`, formData);
+}
+
+export function confirmCoursePlan(id: string, previewId: string, data: CoursePlanData) {
+  return request<CoursePlanData>(`/api/disciplines/${id}/course-plan/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ preview_id: previewId, data }),
+  });
+}
+
+export function deleteCoursePlan(id: string) {
+  return request<unknown>(`/api/disciplines/${id}/course-plan`, { method: "DELETE" });
+}
+
 export function getAcademicSimulation(id: string, targetAverage: number) {
   const params = new URLSearchParams({ target_average: String(targetAverage) });
   return request<AcademicSimulation>(`/api/disciplines/${id}/academic-simulation?${params.toString()}`);
@@ -170,5 +246,12 @@ export function confirmMatriculaImport(payload: MatriculaImportConfirmRequest) {
   return request<MatriculaImportConfirmResponse>("/api/import/matricula-pdf/confirm", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export function sendDisciplineAssistantMessage(id: string, message: string, recentMessages: AssistantMessage[], userGoal?: string | null) {
+  return request<DisciplineAssistantResponse>(`/api/disciplines/${id}/assistant/messages`, {
+    method: "POST",
+    body: JSON.stringify({ message, recent_messages: recentMessages.slice(-8).map(({ role, content }) => ({ role, content })), user_goal: userGoal || null }),
   });
 }

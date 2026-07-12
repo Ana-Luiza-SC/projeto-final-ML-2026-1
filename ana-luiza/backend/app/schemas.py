@@ -83,6 +83,14 @@ class AssessmentCreate(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
     source: Literal["manual", "course_plan"] = "manual"
     status: Literal["planned", "completed", "cancelled"] = "planned"
+    code: str | None = None
+    evaluation_group_code: str | None = None
+    evaluation_group_name: str | None = None
+    group_final_weight: float | None = Field(default=None, gt=0, le=100)
+    group_weight: float | None = Field(default=None, gt=0, le=100)
+    requires_date: bool = False
+    description: str | None = Field(default=None, max_length=500)
+    source_page: int | None = Field(default=None, ge=1)
 
     model_config = {
         "json_schema_extra": {
@@ -140,6 +148,7 @@ class AcademicSimulation(BaseModel):
     attendance: AttendanceResult
     academic_status: AcademicStatus
     warnings: list[str]
+    group_results: list[dict[str, Any]] = Field(default_factory=list)
 
     model_config = {
         "json_schema_extra": {
@@ -256,6 +265,8 @@ class StudyRecommendationResponse(BaseModel):
     used_fallback: bool
     provider: RecommendationProvider
     latency_ms: float = Field(..., ge=0)
+    used_evidence: list[str] = Field(default_factory=list)
+    influencing_assessments: list[str] = Field(default_factory=list)
 
     model_config = {
         "json_schema_extra": {
@@ -276,6 +287,26 @@ class StudyRecommendationResponse(BaseModel):
             }
         }
     }
+
+
+class AssistantRecentMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=1000)
+
+
+class DisciplineAssistantRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=1000)
+    recent_messages: list[AssistantRecentMessage] = Field(default_factory=list, max_length=8)
+    user_goal: str | None = Field(default=None, max_length=500)
+
+
+class DisciplineAssistantResponse(BaseModel):
+    status: Literal["success"] = "success"
+    source: Literal["gemini", "fallback"]
+    answer: str = Field(..., min_length=1)
+    evidence: list[str] = Field(default_factory=list)
+    suggested_actions: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class StudyPlanTimeWindow(BaseModel):
@@ -403,6 +434,16 @@ class StudyPlanMetrics(BaseModel):
     discipline_count: int
 
 
+class StudyPlanPriorityInfluence(BaseModel):
+    discipline_id: UUID
+    assessment_id: UUID | None = None
+    assessment_name: str
+    assessment_date: Date
+    weight: float | None = None
+    bonus: int = Field(..., ge=1, le=2)
+    reason: str
+
+
 class StudyPlanResponse(BaseModel):
     status: Literal["success"]
     source: StudyPlanSource
@@ -410,6 +451,7 @@ class StudyPlanResponse(BaseModel):
     summary: str
     warnings: list[str] = Field(default_factory=list)
     metrics: StudyPlanMetrics
+    priority_influences: list[StudyPlanPriorityInfluence] = Field(default_factory=list)
     request_id: str
 
 
@@ -627,6 +669,21 @@ class AssessmentUpdate(BaseModel):
     topics: list[str] | None = None
     notes: str | None = Field(default=None, max_length=500)
     status: Literal["planned", "completed", "cancelled"] | None = None
+    code: str | None = None
+    evaluation_group_code: str | None = None
+    evaluation_group_name: str | None = None
+    group_final_weight: float | None = Field(default=None, gt=0, le=100)
+    group_weight: float | None = Field(default=None, gt=0, le=100)
+    requires_date: bool | None = None
+    description: str | None = Field(default=None, max_length=500)
+    source_page: int | None = Field(default=None, ge=1)
+
+
+class AssessmentCompleteRequest(BaseModel):
+    grade: float = Field(..., ge=0, le=10)
+    date: Date | None = None
+    topics: list[str] | None = None
+    notes: str | None = Field(default=None, max_length=500)
 
 
 class AbsenceCreate(BaseModel):
@@ -651,10 +708,37 @@ class AttendanceSummary(BaseModel):
     warnings: list[str]
 
 
+class CoursePlanEvaluationItem(BaseModel):
+    code: str | None = None
+    name: str
+    group_weight: float | None = Field(default=None, gt=0, le=100)
+    date: Date | None = None
+    requires_date: bool = True
+    description: str | None = None
+    topics: list[str] = Field(default_factory=list)
+    source_page: int | None = Field(default=None, ge=1)
+    status: Literal["recognized", "requires_review"] = "recognized"
+
+
+class CoursePlanEvaluationGroup(BaseModel):
+    code: str
+    name: str
+    final_weight: float = Field(..., gt=0, le=100)
+    items: list[CoursePlanEvaluationItem] = Field(default_factory=list)
+
+
 class CoursePlanAssessment(BaseModel):
     name: str
+    code: str | None = None
     date: Date | None = None
     weight: float | None = Field(default=None, gt=0, le=100)
+    group_code: str | None = None
+    group_name: str | None = None
+    group_final_weight: float | None = Field(default=None, gt=0, le=100)
+    group_weight: float | None = Field(default=None, gt=0, le=100)
+    requires_date: bool = False
+    description: str | None = None
+    source_page: int | None = Field(default=None, ge=1)
     topics: list[str] = Field(default_factory=list)
     status: Literal["recognized", "requires_review"] = "recognized"
 
@@ -668,6 +752,7 @@ class CoursePlanData(BaseModel):
     objectives: list[str] = Field(default_factory=list)
     contents: list[str] = Field(default_factory=list)
     schedule: list[str] = Field(default_factory=list)
+    evaluation_groups: list[CoursePlanEvaluationGroup] = Field(default_factory=list)
     assessments: list[CoursePlanAssessment] = Field(default_factory=list)
     bibliography: list[str] = Field(default_factory=list)
 
@@ -677,6 +762,10 @@ class CoursePlanPreviewResponse(BaseModel):
     expires_at: datetime
     data: CoursePlanData
     warnings: list[str]
+    source: Literal["gemini", "local_parser"] = "local_parser"
+    model: str | None = None
+    evaluation_group_count: int = 0
+    evaluation_component_count: int = 0
 
 
 class CoursePlanConfirmRequest(BaseModel):

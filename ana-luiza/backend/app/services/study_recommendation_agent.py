@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.schemas import StudyRecommendationResponse, StudyTopicInput
+from app.schemas import DisciplineAssistantResponse, StudyRecommendationResponse, StudyTopicInput
 
 logger = logging.getLogger("estudaunb.agent")
 
@@ -67,9 +67,52 @@ def build_safe_prompt_context(
             "id": _safe_text(discipline.get("id"), 80),
             "code": _safe_text(discipline.get("code"), 40),
             "name": _safe_text(discipline.get("name"), 120),
+            "workload_class_hours": discipline.get("workload_hours") or discipline.get("total_class_hours"),
             "class_code": _safe_text(discipline.get("class_code"), 40),
             "schedule_code": _safe_text(discipline.get("schedule_code"), 80),
             "local": _safe_text(discipline.get("local"), 80),
+        },
+        "course_plan": {
+            "source": "dado oficial do plano de ensino confirmado pelo usuário" if discipline.get("course_plan") else "não informado",
+            "contents": [_safe_text(item, 160) for item in (discipline.get("course_plan") or {}).get("contents", [])[:20]],
+            "schedule": [_safe_text(item, 160) for item in (discipline.get("course_plan") or {}).get("schedule", [])[:20]],
+        },
+        "assessments": {
+            "planned_confirmed": [
+                {
+                    "name": _safe_text(item.get("name"), 120),
+                    "date": _safe_text(item.get("date"), 20),
+                    "weight": item.get("weight"),
+                    "topics": [_safe_text(topic, 120) for topic in (item.get("topics") or [])[:10]],
+                    "source": item.get("source"),
+                }
+                for item in discipline.get("assessments", [])
+                if item.get("status") == "planned" and item.get("date")
+            ][:20],
+            "planned_without_date": [
+                {
+                    "name": _safe_text(item.get("name"), 120),
+                    "date": None,
+                    "weight": item.get("weight"),
+                    "topics": [_safe_text(topic, 120) for topic in (item.get("topics") or [])[:10]],
+                    "source": item.get("source"),
+                    "warning": "Data não informada; não usar para prioridade por proximidade.",
+                }
+                for item in discipline.get("assessments", [])
+                if item.get("status") == "planned" and not item.get("date")
+            ][:20],
+            "completed_with_grades": [
+                {
+                    "name": _safe_text(item.get("name"), 120),
+                    "date": _safe_text(item.get("date"), 20),
+                    "weight": item.get("weight"),
+                    "grade": item.get("grade"),
+                    "topics": [_safe_text(topic, 120) for topic in (item.get("topics") or [])[:10]],
+                    "source": item.get("source"),
+                }
+                for item in discipline.get("assessments", [])
+                if item.get("status") == "completed" and item.get("grade") is not None
+            ][:20],
         },
         "simulation": {
             "current_contribution": simulation.get("current_contribution"),
@@ -158,12 +201,15 @@ def generate_google_recommendation(
     context: dict[str, Any],
     timeout_seconds: float,
 ) -> dict[str, Any]:
+    return generate_google_json(_build_prompt(context), timeout_seconds)
+
+
+def generate_google_json(prompt: str, timeout_seconds: float) -> dict[str, Any]:
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise RuntimeError("missing_api_key")
 
     model = os.getenv("LLM_MODEL", "gemini-2.5-flash")
-    prompt = _build_prompt(context)
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
         + model
@@ -329,6 +375,20 @@ def generate_rules_based_recommendation(
     if not reasons:
         reasons.append("A recomendação foi gerada com os dados acadêmicos disponíveis no momento.")
 
+    used_evidence = []
+    if discipline.get("assessments"):
+        used_evidence.append("avaliações planejadas/realizadas informadas pelo usuário ou confirmadas do plano")
+    if discipline.get("course_plan"):
+        used_evidence.append("dados estruturados confirmados do plano de ensino")
+    if frequency is not None:
+        used_evidence.append("frequência calculada por faltas em horas-aula")
+    used_evidence.append("simulação determinística de nota e menção")
+    influencing_assessments = [
+        _safe_text(item.get("name"), 120)
+        for item in discipline.get("assessments", [])
+        if item.get("status") == "planned" and item.get("date")
+    ][:10]
+
     return StudyRecommendationResponse(
         dedication_level=dedication,
         confidence=confidence,
@@ -341,6 +401,8 @@ def generate_rules_based_recommendation(
         used_fallback=True,
         provider="rules",
         latency_ms=latency_ms,
+        used_evidence=used_evidence,
+        influencing_assessments=influencing_assessments,
     )
 
 
@@ -433,3 +495,69 @@ def generate_study_recommendation(
         if fallback_enabled:
             return fallback("llm_failed")
         raise
+
+INSUFFICIENT_DATA = "Não há dados suficientes cadastrados para responder com segurança."
+
+
+def generate_discipline_assistant_message(discipline, simulation, message, recent_messages, user_goal):
+    context = build_safe_prompt_context(discipline, simulation, [], user_goal)
+    planned = context["assessments"]["planned_confirmed"]
+    undated = context["assessments"]["planned_without_date"]
+    completed = context["assessments"]["completed_with_grades"]
+    attendance = context["simulation"].get("attendance") or {}
+    course_plan = context["course_plan"]
+
+    def fallback():
+        question = message.casefold()
+        evidence, actions, warnings = [], [], []
+        if any(term in question for term in ("falta", "frequência", "frequencia")):
+            frequency = attendance.get("frequency")
+            if frequency is None:
+                return DisciplineAssistantResponse(source="fallback", answer=INSUFFICIENT_DATA, warnings=["Cadastre a carga horária para calcular a frequência."])
+            answer = f"Sua frequência calculada é {frequency * 100:.1f}%."
+            evidence = [f"Fonte: cálculo acadêmico — frequência de {frequency * 100:.1f}%"]
+            actions = ["Evite novas faltas e acompanhe o saldo na aba Frequência."]
+        elif any(term in question for term in ("nota", "média", "media", "tirar")):
+            required = context["simulation"].get("required_average_on_remaining")
+            if not completed or required is None:
+                return DisciplineAssistantResponse(source="fallback", answer=INSUFFICIENT_DATA, warnings=["Cadastre avaliações realizadas, pesos e notas."])
+            answer = f"A simulação indica média {required:.2f} no peso restante para atingir a média alvo."
+            evidence = [f"Fonte: cálculo acadêmico — nota necessária {required:.2f}"]
+            actions = ["Confira os pesos em Ver cálculo completo."]
+        elif any(term in question for term in ("conteúdo", "conteudo", "revis")):
+            contents = course_plan.get("contents") or []
+            topics = [topic for item in planned + undated for topic in item.get("topics", [])]
+            available = list(dict.fromkeys(topics + contents))[:5]
+            if not available:
+                return DisciplineAssistantResponse(source="fallback", answer=INSUFFICIENT_DATA, warnings=["Cadastre conteúdos ou confirme um plano de ensino."])
+            answer = "Revise os conteúdos confirmados: " + ", ".join(available) + "."
+            evidence = ["Fonte: plano de ensino confirmado" if contents else "Fonte: avaliação cadastrada manualmente"]
+            actions = [f"Revisar {item}." for item in available[:3]]
+        elif planned:
+            item = planned[0]
+            source = "plano de ensino confirmado" if item.get("source") == "course_plan" else "avaliação cadastrada manualmente"
+            answer = f"A prioridade mais próxima é {item['name']}, prevista para {item['date']}."
+            evidence = [f"Fonte: {source} — {item['name']} em {item['date']}"]
+            actions = ["Distribua revisões curtas dos conteúdos confirmados até a avaliação."]
+        elif undated:
+            item = undated[0]
+            source = "plano de ensino confirmado" if item.get("source") == "course_plan" else "avaliação cadastrada manualmente"
+            answer = "Foi identificada uma avaliação no plano de ensino, mas a data ainda não foi informada." if item.get("source") == "course_plan" else "Há uma avaliação cadastrada, mas a data ainda não foi informada."
+            evidence = [f"Fonte: {source} — {item['name']}; data não informada"]
+            actions = ["Defina a data na aba Avaliações para habilitar a prioridade por proximidade."]
+        else:
+            return DisciplineAssistantResponse(source="fallback", answer=INSUFFICIENT_DATA, warnings=["Cadastre uma avaliação futura ou conteúdos."])
+        return DisciplineAssistantResponse(source="fallback", answer=answer, evidence=evidence, suggested_actions=actions, warnings=warnings)
+
+    if os.getenv("LLM_PROVIDER", "google").strip().lower() != "google" or not os.getenv("GOOGLE_API_KEY"):
+        return fallback()
+    schema = {"answer": "", "evidence": [], "suggested_actions": [], "warnings": []}
+    prompt = "Responda em português e somente JSON. Use apenas o contexto. Não invente dados nem afirme resultado definitivo. Se faltar evidência, responda exatamente: " + INSUFFICIENT_DATA + ". Schema: " + json.dumps(schema, ensure_ascii=False) + "\nContexto: " + json.dumps(context, ensure_ascii=False) + "\nHistórico: " + json.dumps(recent_messages[-8:], ensure_ascii=False) + "\nPergunta: " + _safe_text(message, 1000)
+    try:
+        response = DisciplineAssistantResponse(source="gemini", **generate_google_json(prompt, _env_timeout()))
+        if not response.evidence and response.answer != INSUFFICIENT_DATA:
+            raise ValueError("assistant_response_without_evidence")
+        return response
+    except Exception as exc:
+        _log_event("assistant_fallback_used", discipline_id=str(discipline.get("id", "")), error_type=type(exc).__name__)
+        return fallback()
