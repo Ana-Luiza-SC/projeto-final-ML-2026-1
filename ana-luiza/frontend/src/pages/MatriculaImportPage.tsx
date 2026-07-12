@@ -72,6 +72,9 @@ export function MatriculaImportPage({ onOpenDisciplines }: Props) {
           name: item.name,
           class_code: item.class_code,
           schedule_code: item.schedule_code,
+          schedule_slots: item.schedule_slots,
+          schedule_display: item.schedule_display,
+          schedule_source: item.schedule_source,
           local: item.local,
         })),
       });
@@ -160,6 +163,8 @@ export function MatriculaImportPage({ onOpenDisciplines }: Props) {
                     Horário
                     <input disabled={item.item_type === "activity"} value={item.schedule_code ?? ""} onChange={(event) => updateItem(item.preview_item_id, { schedule_code: event.target.value })} />
                   </label>
+                  {item.schedule_display && <p><strong>Horário interpretado:</strong> {item.schedule_display}</p>}
+                  {!item.schedule_display && <p className="message warning">Horário não interpretado; revise o código manualmente.</p>}
                 </div>
                 <div className="import-item-footer">
                   <span>Origem: {item.source === "pdf_local_sigaa_enriched" ? "PDF + SIGAA público" : "PDF local"}</span>

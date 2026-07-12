@@ -13,6 +13,9 @@ class DisciplineCreate(BaseModel):
     professor: str | None = None
     class_code: str | None = None
     schedule_code: str | None = None
+    schedule_slots: list[dict[str, str]] = Field(default_factory=list)
+    schedule_display: str | None = None
+    schedule_source: Literal["receipt_table", "sigaa_tooltip", "decoded_code", "unresolved"] = "unresolved"
     local: str | None = None
     total_classes: int | None = Field(default=None, ge=0)
     missed_classes: int | None = Field(default=None, ge=0)
@@ -72,6 +75,9 @@ class AcademicActivity(BaseModel):
     participation_type: str | None = None
     status: str | None = None
     schedule_code: str | None = None
+    schedule_slots: list[dict[str, str]] = Field(default_factory=list)
+    schedule_display: str | None = None
+    schedule_source: Literal["receipt_table", "sigaa_tooltip", "decoded_code", "unresolved"] = "unresolved"
 
 
 class AssessmentCreate(BaseModel):
@@ -463,6 +469,9 @@ class SigaaComponent(BaseModel):
     workload_hours: int | None = Field(default=None, ge=0)
     syllabus: str | None = None
     current_program: str | None = None
+    theoretical_workload_hours: int | None = Field(default=None, ge=0)
+    practical_workload_hours: int | None = Field(default=None, ge=0)
+    details_processed: bool = False
     source_url: str
 
     model_config = {
@@ -549,6 +558,9 @@ class ImportPreviewItem(BaseModel):
     name: str | None = Field(default=None, max_length=160)
     class_code: str | None = Field(default=None, max_length=30)
     schedule_code: str | None = Field(default=None, max_length=60)
+    schedule_slots: list[dict[str, str]] = Field(default_factory=list)
+    schedule_display: str | None = Field(default=None, max_length=500)
+    schedule_source: Literal["receipt_table", "sigaa_tooltip", "decoded_code", "unresolved"] = "unresolved"
     local: str | None = Field(default=None, max_length=120)
     source: ImportSource = "pdf_local"
     sigaa_lookup: SigaaLookupStatus = "not_queried"
@@ -591,6 +603,9 @@ class ImportConfirmationItem(BaseModel):
     name: str | None = Field(default=None, max_length=160)
     class_code: str | None = Field(default=None, max_length=30)
     schedule_code: str | None = Field(default=None, max_length=60)
+    schedule_slots: list[dict[str, str]] = Field(default_factory=list)
+    schedule_display: str | None = Field(default=None, max_length=500)
+    schedule_source: Literal["receipt_table", "sigaa_tooltip", "decoded_code", "unresolved"] = "unresolved"
     local: str | None = Field(default=None, max_length=120)
 
     model_config = {"extra": "forbid"}

@@ -95,6 +95,8 @@ def get_cached_component(query: str) -> SigaaComponentSearchResponse | None:
     if not cached:
         return None
     response = SigaaComponentSearchResponse.model_validate(cached)
+    if response.component is not None and not response.component.details_processed:
+        return None
     response.cached = True
     return response
 
@@ -454,12 +456,24 @@ def submit_component_search(session: requests.Session, action_url: str, payload:
     return response.text
 
 
+def fetch_component_details(session: requests.Session, detail_url: str, referer: str) -> str:
+    url = urljoin(SIGAA_COMPONENTS_URL, detail_url)
+    response = session.get(url, headers={"User-Agent": USER_AGENT, "Referer": referer}, timeout=TIMEOUT_SECONDS, allow_redirects=True)
+    response.raise_for_status()
+    parsed = urlparse(response.url)
+    path = parsed.path.casefold()
+    if parsed.netloc != urlparse(SIGAA_COMPONENTS_URL).netloc or "/public/" not in path or "login" in path:
+        raise SigaaSessionRedirectError("O SIGAA redirecionou o detalhe para login ou área autenticada.")
+    return response.text
+
 def parse_sigaa_component_details(html: str, source_url: str) -> dict[str, str]:
     soup = BeautifulSoup(html, "html.parser")
     return {
-        "syllabus": _find_labeled_value(soup, ["Ementa", "Ementa:", "Descrição"]),
+        "syllabus": _find_labeled_value(soup, ["Ementa/Descrição", "Ementa", "Descrição"]),
         "current_program": _find_labeled_value(soup, ["Programa atual", "Programa", "Conteúdo"]),
-        "workload_hours": _find_labeled_value(soup, ["Carga horária", "Carga Horária"]),
+        "workload_hours": _find_labeled_value(soup, ["Carga horária total", "Carga horária", "Carga Horária"]),
+        "theoretical_workload_hours": _find_labeled_value(soup, ["Carga horária teórica", "CH Teórica"]),
+        "practical_workload_hours": _find_labeled_value(soup, ["Carga horária prática", "CH Prática"]),
         "source_url": source_url,
     }
 
@@ -471,6 +485,10 @@ def _find_labeled_value(soup: BeautifulSoup, labels: list[str]) -> str:
         text_normalized = _normalize_text(text)
         for label in normalized_labels:
             if text_normalized.startswith(label):
+                header = row.find(["th", "dt", "strong", "label"])
+                value = row.find(["td", "dd"])
+                if header is not None and value is not None and _normalize_text(_text(header)) == label:
+                    return _text(value)
                 return re.sub(r"^[^:：-]+[:：-]\s*", "", text, count=1).strip()
     return ""
 
@@ -493,6 +511,9 @@ def _build_component_from_values(values: dict[str, str], source_url: str) -> Sig
         workload_hours=_parse_workload(values.get("workload_hours", "")),
         syllabus=values.get("syllabus", ""),
         current_program=values.get("current_program", ""),
+        theoretical_workload_hours=_parse_workload(values.get("theoretical_workload_hours", "")),
+        practical_workload_hours=_parse_workload(values.get("practical_workload_hours", "")),
+        details_processed=values.get("details_processed") == "true",
         source_url=source_url,
     )
 
@@ -545,7 +566,13 @@ def _extract_component_values_from_row(row: Tag, query: str) -> tuple[dict[str, 
                 values["type"] = cells[2] if len(cells) > 2 else ""
                 values["workload_hours"] = cells[3] if len(cells) > 3 else ""
 
-    link = row.find("a", href=lambda href: bool(href) and href != "#")
+    link = None
+    component_name = _normalize_text(values.get("name", ""))
+    for candidate in row.find_all("a", href=lambda href: bool(href) and href != "#"):
+        semantic = _normalize_text(" ".join([_text(candidate), candidate.get("title", ""), candidate.get("aria-label", "")]))
+        if (component_name and component_name in semantic) or "detalh" in semantic or ("visualizar" in semantic and "componente" in semantic):
+            link = candidate
+            break
     if link is not None:
         source_url = urljoin(SIGAA_COMPONENTS_URL, link["href"])
     return values, source_url
@@ -611,7 +638,7 @@ def _has_search_form(soup: BeautifulSoup) -> bool:
     return soup.find("form") is not None
 
 
-def parse_component_results(html: str, query: str) -> SigaaComponentSearchResponse:
+def parse_component_results(html: str, query: str, details_html: str | None = None, details_processed: bool = False) -> SigaaComponentSearchResponse:
     normalized_query = normalize_query(query)
     soup = BeautifulSoup(html, "html.parser")
 
@@ -646,11 +673,14 @@ def parse_component_results(html: str, query: str) -> SigaaComponentSearchRespon
         )
 
     values, source_url = result_row
-    details = parse_sigaa_component_details(html, source_url)
+    details = parse_sigaa_component_details(details_html or "", source_url)
     if not values.get("workload_hours"):
         values["workload_hours"] = details.get("workload_hours", "")
     values["syllabus"] = details.get("syllabus", "")
     values["current_program"] = details.get("current_program", "")
+    values["theoretical_workload_hours"] = details.get("theoretical_workload_hours", "")
+    values["practical_workload_hours"] = details.get("practical_workload_hours", "")
+    values["details_processed"] = "true" if details_processed else "false"
     component = _build_component_from_values(values, source_url)
     if component is None:
         return _empty_response(
@@ -686,7 +716,15 @@ def _search_once(session: requests.Session, normalized_query: str) -> SigaaCompo
     search_type = "code" if _looks_like_component_code(normalized_query) else "name"
     payload = build_search_payload(form_data, search_type, normalized_query)
     response_html = submit_component_search(session, form_data.action_url, payload)
-    return parse_component_results(response_html, normalized_query)
+    basic = parse_component_results(response_html, normalized_query)
+    if basic.status != "found" or basic.component is None:
+        return basic
+    try:
+        details_html = fetch_component_details(session, basic.component.source_url, form_data.action_url)
+        return parse_component_results(response_html, normalized_query, details_html, details_processed=True)
+    except (requests.RequestException, SigaaSessionRedirectError):
+        basic.warnings.append("Dados básicos encontrados; o detalhe público não pôde ser carregado. Revise ou preencha manualmente.")
+        return basic
 
 
 def search_sigaa_component(

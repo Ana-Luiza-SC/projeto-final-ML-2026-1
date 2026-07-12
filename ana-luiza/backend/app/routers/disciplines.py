@@ -13,6 +13,7 @@ from app.schemas import (
     DisciplineCreate,
     DisciplineRead,
 )
+from app.services.schedule_normalizer import resolve
 from app.services.academic_calculator import (
     calculate_attendance,
     calculate_grade_simulation,
@@ -65,7 +66,11 @@ def _ensure_discipline(discipline_id: UUID) -> dict:
     responses={422: VALIDATION_RESPONSE},
 )
 def create_discipline(payload: DisciplineCreate) -> dict:
-    return storage.create_discipline(payload.model_dump())
+    data = payload.model_dump()
+    if data.get("schedule_code") and not data.get("schedule_slots"):
+        slots, display, source, _ = resolve(data["schedule_code"])
+        data.update(schedule_slots=slots, schedule_display=display, schedule_source=source)
+    return storage.create_discipline(data)
 
 
 @router.get(

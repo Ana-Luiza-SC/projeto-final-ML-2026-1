@@ -66,6 +66,7 @@ O backend possui uma consulta best-effort à fonte pública de componentes curri
 
 A consulta usa cache local runtime e não depende de login. Se o SIGAA estiver indisponível, se a página JSF mudar ou se o componente não for encontrado, o sistema continua funcionando com o cadastro manual da disciplina. A integração não coleta dados de estudante, não usa páginas autenticadas, não consulta taxa de reprovação e não avalia professor.
 
+A busca segue semanticamente o link público de detalhes na mesma sessão para obter ementa e programa; falhas parciais preservam código e nome. O cache ignora registros antigos sem detalhe processado. Horários importados priorizam a tabela semanal e são exibidos de forma legível, mantendo o código compacto apenas para auditoria e revisão manual.
 
 ## Agente de recomendação
 

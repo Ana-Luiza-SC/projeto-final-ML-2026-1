@@ -6,13 +6,14 @@ import os
 import re
 import time
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
 from app import storage
+from app.services.schedule_normalizer import from_weekly_table, resolve
 from app.schemas import (
     ImportConfirmationItem,
     ImportPreviewItem,
@@ -89,6 +90,9 @@ class ExtractedCandidate:
     local: str | None
     confidence: str
     warnings: tuple[str, ...]
+    schedule_slots: tuple[Any, ...] = ()
+    schedule_display: str | None = None
+    schedule_source: str = "unresolved"
 
 
 def _now_ms() -> float:
@@ -345,6 +349,16 @@ def extract_candidates_from_table(tables: list[list[list[str | None]]]) -> list[
         if candidates:
             break  # encontrou a tabela certa
 
+    codes = {candidate.code for candidate in candidates if candidate.code}
+    explicit = {}
+    for table in tables:
+        explicit.update(from_weekly_table(table, codes))
+    enriched = []
+    for candidate in candidates:
+        slots, display, source, warnings = resolve(candidate.schedule_code, explicit.get(candidate.code))
+        enriched.append(replace(candidate, schedule_slots=tuple(slots), schedule_display=display, schedule_source=source, warnings=candidate.warnings + tuple(warnings)))
+    candidates = enriched
+
     return candidates
 
 
@@ -577,6 +591,9 @@ def build_preview_from_pdf(path: Path, sigaa_lookup: SigaaLookup | None = None) 
                     "name": candidate.name,
                     "class_code": candidate.class_code,
                     "schedule_code": candidate.schedule_code,
+                    "schedule_slots": list(candidate.schedule_slots),
+                    "schedule_display": candidate.schedule_display,
+                    "schedule_source": candidate.schedule_source,
                     "local": candidate.local,
                     "source": source,
                     "sigaa_lookup": sigaa_status,
@@ -680,6 +697,9 @@ def confirm_import(payload: MatriculaImportConfirmRequest) -> MatriculaImportCon
                     "professor": None,
                     "class_code": class_code,
                     "schedule_code": schedule_code,
+                    "schedule_slots": item.schedule_slots,
+                    "schedule_display": item.schedule_display,
+                    "schedule_source": item.schedule_source,
                     "local": local,
                 }
             )

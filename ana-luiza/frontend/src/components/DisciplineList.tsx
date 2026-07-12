@@ -14,7 +14,8 @@ export function DisciplineList({ disciplines, loading = false, onOpen }: Props) 
         <div className="discipline-meta"><StatusBadge tone="info">{discipline.code}</StatusBadge>{discipline.sigaa_code && <StatusBadge tone="success">SIGAA</StatusBadge>}</div>
         <h3>{discipline.name}</h3>
         <p>{discipline.workload_hours ? `${discipline.workload_hours}h` : "Carga horária não informada"} · Turma {discipline.class_code || "não informada"}</p>
-        <p className="muted">{discipline.schedule_code || "Horário não informado"}</p>
+        <p className="muted">{discipline.schedule_display || "Horário não interpretado"}</p>
+        {discipline.schedule_code && <p className="muted"><small>Código original: {discipline.schedule_code}</small></p>}
       </div>
       <button className="secondary-button" type="button" onClick={() => onOpen(discipline.id)}>Ver disciplina</button>
     </article>)}</div>

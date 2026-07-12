@@ -9,6 +9,9 @@ export type Discipline = {
   professor?: string | null;
   class_code?: string | null;
   schedule_code?: string | null;
+  schedule_slots?: { day: string; start_time: string; end_time: string; source: string }[];
+  schedule_display?: string | null;
+  schedule_source?: "receipt_table" | "sigaa_tooltip" | "decoded_code" | "unresolved";
   local?: string | null;
   total_classes?: number | null;
   missed_classes?: number | null;
@@ -30,6 +33,9 @@ export type DisciplineCreatePayload = {
   professor?: string | null;
   class_code?: string | null;
   schedule_code?: string | null;
+  schedule_slots?: { day: string; start_time: string; end_time: string; source: string }[];
+  schedule_display?: string | null;
+  schedule_source?: "receipt_table" | "sigaa_tooltip" | "decoded_code" | "unresolved";
   local?: string | null;
   sigaa_code?: string | null;
   sigaa_source_url?: string | null;
@@ -300,6 +306,9 @@ export type ImportPreviewItem = {
   name?: string | null;
   class_code?: string | null;
   schedule_code?: string | null;
+  schedule_slots?: { day: string; start_time: string; end_time: string; source: string }[];
+  schedule_display?: string | null;
+  schedule_source?: "receipt_table" | "sigaa_tooltip" | "decoded_code" | "unresolved";
   local?: string | null;
   source: "pdf_local" | "pdf_local_sigaa_enriched";
   sigaa_lookup: SigaaLookupStatus;
@@ -331,6 +340,9 @@ export type ImportConfirmationItem = {
   name?: string | null;
   class_code?: string | null;
   schedule_code?: string | null;
+  schedule_slots?: { day: string; start_time: string; end_time: string; source: string }[];
+  schedule_display?: string | null;
+  schedule_source?: "receipt_table" | "sigaa_tooltip" | "decoded_code" | "unresolved";
   local?: string | null;
 };
 
