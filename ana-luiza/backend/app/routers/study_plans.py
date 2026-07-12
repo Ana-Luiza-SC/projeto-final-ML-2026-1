@@ -29,7 +29,8 @@ INTERNAL_RESPONSE = {"description": "Erro interno controlado ao gerar o plano."}
 )
 def generate(payload: StudyPlanRequest) -> StudyPlanResponse:
     try:
-        return generate_study_plan(payload, storage.list_disciplines())
+        records = [{**item, "assessments": storage.list_assessments(str(item["id"]))} for item in storage.list_disciplines()]
+        return generate_study_plan(payload, records)
     except StudyPlanInputError as exc:
         message = str(exc)
         if "não encontrada" in message:

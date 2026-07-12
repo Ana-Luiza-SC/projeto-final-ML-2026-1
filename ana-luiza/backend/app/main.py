@@ -8,6 +8,8 @@ from app.routers.disciplines import router as disciplines_router
 from app.routers.sigaa import router as sigaa_router
 from app.routers.study_plans import router as study_plans_router
 from app.routers.matricula_import import router as matricula_import_router
+from app.routers.course_plan import router as course_plan_router
+from app.routers.academic_records import router as academic_records_router
 
 app = FastAPI(
     title="EstudaUnB API",
@@ -57,3 +59,5 @@ app.include_router(agent_router)
 app.include_router(sigaa_router)
 app.include_router(study_plans_router)
 app.include_router(matricula_import_router)
+app.include_router(course_plan_router)
+app.include_router(academic_records_router)

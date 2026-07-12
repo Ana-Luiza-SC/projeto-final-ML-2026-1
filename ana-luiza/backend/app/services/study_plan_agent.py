@@ -7,6 +7,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
@@ -113,6 +114,14 @@ def list_registered_disciplines(
     disciplines = []
     for discipline_id in requested_ids:
         record = records_by_id[str(discipline_id)]
+        base_priority = priorities.get(str(discipline_id), 3)
+        bonus = 0
+        for assessment in record.get("assessments", []):
+            if assessment.get("status") != "planned" or not assessment.get("date"):
+                continue
+            assessment_date = assessment["date"] if isinstance(assessment["date"], date) else date.fromisoformat(str(assessment["date"]))
+            days = (assessment_date - date.today()).days
+            bonus = max(bonus, 2 if 0 <= days <= 7 else 1 if 8 <= days <= 14 else 0)
         code = _safe_text(record.get("code"), 40)
         name = _safe_text(record.get("name"), 120)
         disciplines.append(
@@ -120,7 +129,7 @@ def list_registered_disciplines(
                 id=str(discipline_id),
                 code=code,
                 name=name,
-                priority=priorities.get(str(discipline_id), 3),
+                priority=min(5, base_priority + bonus),
             )
         )
     return disciplines

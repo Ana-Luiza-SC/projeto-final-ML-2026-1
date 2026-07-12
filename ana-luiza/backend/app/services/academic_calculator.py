@@ -35,11 +35,13 @@ def validate_grade(grade: float) -> float:
 def normalize_assessments_weights(assessments: list[Any]) -> list[dict[str, Any]]:
     normalized = []
     for assessment in assessments:
+        if _read_field(assessment, "status") == "cancelled":
+            continue
         grade = _read_field(assessment, "grade")
         normalized.append(
             {
                 "name": _read_field(assessment, "name"),
-                "weight": normalize_weight(_read_field(assessment, "weight")),
+                "weight": normalize_weight(_read_field(assessment, "weight")) if _read_field(assessment, "weight") is not None else None,
                 "grade": validate_grade(grade) if grade is not None else None,
                 "date": _read_field(assessment, "date"),
                 "topics": _read_field(assessment, "topics") or [],
@@ -78,7 +80,7 @@ def calculate_grade_simulation(
 ) -> dict[str, Any]:
     target_average = validate_grade(target_average)
     normalized = normalize_assessments_weights(assessments)
-    completed = [item for item in normalized if item["grade"] is not None]
+    completed = [item for item in normalized if item["grade"] is not None and item["weight"] is not None]
 
     current_contribution = sum(item["grade"] * item["weight"] for item in completed)
     completed_weight = sum(item["weight"] for item in completed)
@@ -86,7 +88,9 @@ def calculate_grade_simulation(
     partial_average = current_contribution / completed_weight if completed_weight else None
 
     warnings: list[str] = []
-    total_weight = sum(item["weight"] for item in normalized)
+    if any(item["weight"] is None for item in normalized):
+        warnings.append("Há avaliações sem peso conhecido; a simulação está incompleta.")
+    total_weight = sum(item["weight"] for item in normalized if item["weight"] is not None)
     if normalized and abs(total_weight - 1.0) > 0.001:
         warnings.append("A soma dos pesos cadastrados é diferente de 100%.")
 

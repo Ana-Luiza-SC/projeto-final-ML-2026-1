@@ -76,10 +76,13 @@ class AcademicActivity(BaseModel):
 
 class AssessmentCreate(BaseModel):
     name: str = Field(..., min_length=1)
-    weight: float = Field(..., gt=0)
+    weight: float | None = Field(default=None, gt=0, le=100)
     grade: float | None = Field(default=None, ge=0, le=10)
     date: Date | None = None
     topics: list[str] = Field(default_factory=list)
+    notes: str | None = Field(default=None, max_length=500)
+    source: Literal["manual", "course_plan"] = "manual"
+    status: Literal["planned", "completed", "cancelled"] = "planned"
 
     model_config = {
         "json_schema_extra": {
@@ -93,6 +96,16 @@ class AssessmentCreate(BaseModel):
         }
     }
 
+
+    @model_validator(mode="after")
+    def validate_status_grade(self) -> "AssessmentCreate":
+        if "status" not in self.model_fields_set and self.grade is not None:
+            self.status = "completed"
+        if self.status == "planned" and self.grade is not None:
+            raise ValueError("Avaliação planejada não pode ter nota.")
+        if self.status == "completed" and self.grade is None:
+            raise ValueError("Avaliação realizada exige nota.")
+        return self
 
 class AssessmentRead(AssessmentCreate):
     id: UUID
@@ -604,3 +617,68 @@ class MatriculaImportConfirmResponse(BaseModel):
     summary: ImportConfirmSummary
     request_id: str
 
+
+
+class AssessmentUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    weight: float | None = Field(default=None, gt=0, le=100)
+    grade: float | None = Field(default=None, ge=0, le=10)
+    date: Date | None = None
+    topics: list[str] | None = None
+    notes: str | None = Field(default=None, max_length=500)
+    status: Literal["planned", "completed", "cancelled"] | None = None
+
+
+class AbsenceCreate(BaseModel):
+    date: Date
+    class_hours: float = Field(..., gt=0)
+    notes: str | None = Field(default=None, max_length=300)
+
+
+class AbsenceRead(AbsenceCreate):
+    id: UUID
+    discipline_id: UUID
+
+
+class AttendanceSummary(BaseModel):
+    workload_class_hours: float | None
+    missed_class_hours: float
+    absence_limit_class_hours: float | None
+    remaining_class_hours: float | None
+    frequency: float | None
+    absence_percentage: float | None
+    risk_level: Literal["low", "medium", "high", "unknown"]
+    warnings: list[str]
+
+
+class CoursePlanAssessment(BaseModel):
+    name: str
+    date: Date | None = None
+    weight: float | None = Field(default=None, gt=0, le=100)
+    topics: list[str] = Field(default_factory=list)
+    status: Literal["recognized", "requires_review"] = "recognized"
+
+
+class CoursePlanData(BaseModel):
+    code: str | None = None
+    name: str | None = None
+    semester: str | None = None
+    workload_hours: float | None = Field(default=None, gt=0)
+    term_weeks: int | None = Field(default=None, gt=0, le=30)
+    objectives: list[str] = Field(default_factory=list)
+    contents: list[str] = Field(default_factory=list)
+    schedule: list[str] = Field(default_factory=list)
+    assessments: list[CoursePlanAssessment] = Field(default_factory=list)
+    bibliography: list[str] = Field(default_factory=list)
+
+
+class CoursePlanPreviewResponse(BaseModel):
+    preview_id: UUID
+    expires_at: datetime
+    data: CoursePlanData
+    warnings: list[str]
+
+
+class CoursePlanConfirmRequest(BaseModel):
+    preview_id: UUID
+    data: CoursePlanData

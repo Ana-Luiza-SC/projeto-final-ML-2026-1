@@ -6,6 +6,9 @@ from uuid import uuid4
 DISCIPLINES: dict[str, dict] = {}
 ASSESSMENTS: dict[str, list[dict]] = {}
 IMPORT_PREVIEWS: dict[str, dict] = {}
+COURSE_PLAN_PREVIEWS: dict[str, dict] = {}
+COURSE_PLANS: dict[str, dict] = {}
+ABSENCES: dict[str, list[dict]] = {}
 
 
 def utc_now() -> datetime:
@@ -18,6 +21,7 @@ def create_discipline(payload: dict) -> dict:
     record = {"id": discipline_id, **payload, "created_at": now, "updated_at": now}
     DISCIPLINES[discipline_id] = record
     ASSESSMENTS[discipline_id] = []
+    ABSENCES[discipline_id] = []
     return record
 
 
@@ -134,3 +138,59 @@ def cleanup_expired_import_previews() -> int:
         IMPORT_PREVIEWS.pop(key, None)
     return len(expired)
 
+
+
+def get_assessment(discipline_id: str, assessment_id: str) -> dict | None:
+    return next((item for item in list_assessments(discipline_id) if item["id"] == assessment_id), None)
+
+
+def update_assessment(discipline_id: str, assessment_id: str, payload: dict) -> dict | None:
+    item = get_assessment(discipline_id, assessment_id)
+    if item is None:
+        return None
+    item.update(payload)
+    DISCIPLINES[discipline_id]["updated_at"] = utc_now()
+    return item
+
+
+def delete_assessment(discipline_id: str, assessment_id: str) -> bool:
+    items = ASSESSMENTS.get(discipline_id, [])
+    ASSESSMENTS[discipline_id] = [item for item in items if item["id"] != assessment_id]
+    return len(items) != len(ASSESSMENTS[discipline_id])
+
+
+def add_absence(discipline_id: str, payload: dict) -> dict:
+    if any(item["date"] == payload["date"] and item["class_hours"] == payload["class_hours"] for item in ABSENCES.get(discipline_id, [])):
+        raise ValueError("Já existe uma falta com a mesma data e duração.")
+    item = {"id": str(uuid4()), "discipline_id": discipline_id, **payload}
+    ABSENCES.setdefault(discipline_id, []).append(item)
+    return item
+
+
+def list_absences(discipline_id: str) -> list[dict]:
+    return sorted(ABSENCES.get(discipline_id, []), key=lambda item: item["date"], reverse=True)
+
+
+def update_absence(discipline_id: str, absence_id: str, payload: dict) -> dict | None:
+    item = next((item for item in ABSENCES.get(discipline_id, []) if item["id"] == absence_id), None)
+    if item is None:
+        return None
+    candidate = {**item, **payload}
+    if any(other["id"] != absence_id and other["date"] == candidate["date"] and other["class_hours"] == candidate["class_hours"] for other in ABSENCES.get(discipline_id, [])):
+        raise ValueError("Já existe uma falta com a mesma data e duração.")
+    item.update(payload)
+    return item
+
+
+def delete_absence(discipline_id: str, absence_id: str) -> bool:
+    items = ABSENCES.get(discipline_id, [])
+    ABSENCES[discipline_id] = [item for item in items if item["id"] != absence_id]
+    return len(items) != len(ABSENCES[discipline_id])
+
+
+def save_course_plan(discipline_id: str, payload: dict) -> dict:
+    record = {**payload, "discipline_id": discipline_id, "confirmed_at": utc_now()}
+    COURSE_PLANS[discipline_id] = record
+    if record.get("workload_hours") is not None:
+        DISCIPLINES[discipline_id]["workload_hours"] = record["workload_hours"]
+    return record
