@@ -156,6 +156,9 @@ export type StudyRecommendationRequest = {
 export type AssistantMessage = { role: "user" | "assistant"; content: string; evidence?: string[]; suggested_actions?: string[]; warnings?: string[]; source?: "gemini" | "fallback" };
 export type DisciplineAssistantResponse = { status: "success"; source: "gemini" | "fallback"; answer: string; evidence: string[]; suggested_actions: string[]; warnings: string[] };
 
+export type StudyAction = { strategy_id: "retrieval_practice" | "spaced_practice" | "interleaving" | "concrete_examples" | "self_explanation"; action: string; topic?: string | null; estimated_minutes?: number | null; reason: string; evidence: string; reference_ids: string[] };
+export type StudyStrategyReference = { id: string; short_citation: string; title: string; url: string };
+
 export type StudyRecommendationResponse = {
   dedication_level: DedicationLevel;
   confidence: number;
@@ -168,8 +171,11 @@ export type StudyRecommendationResponse = {
   used_fallback: boolean;
   provider: "google" | "rules";
   latency_ms: number;
+  warnings?: string[];
   used_evidence?: string[];
   influencing_assessments?: string[];
+  study_actions?: StudyAction[];
+  strategy_references?: StudyStrategyReference[];
 };
 
 
@@ -367,3 +373,13 @@ export type MatriculaImportConfirmResponse = {
   };
   request_id: string;
 };
+
+export type ContentStatus = "not_started" | "in_progress" | "studied" | "reviewed";
+export type ContentNode = { id: string; discipline_id: string; parent_id?: string | null; title: string; description?: string | null; difficulty?: "low" | "medium" | "high" | null; status: ContentStatus; created_at: string; children: ContentNode[] };
+export type ContentNodePayload = { parent_id?: string | null; title: string; description?: string | null; difficulty?: "low" | "medium" | "high" | null; status: ContentStatus };
+export type AssessmentContentSelection = { content_node_id: string; include_descendants: boolean };
+export type ResolvedContentNode = Omit<ContentNode, "children"> & { association_origin: "direct" | "inherited"; selected_ancestor_id?: string | null };
+export type AssessmentContentAssociation = { assessment_id: string; selections: AssessmentContentSelection[]; resolved_nodes: ResolvedContentNode[] };
+export type ContentDraftNode = { temporary_id: string; parent_temporary_id?: string | null; title: string; description?: string | null; source_evidence: string; confidence: number; warnings: string[] };
+export type ContentExtractionPreview = { preview_id: string; expires_at: string; draft_nodes: ContentDraftNode[]; warnings: string[]; source: "gemini" | "local_fallback"; model?: string | null; used_fallback: boolean; fallback_reason?: "missing_api_key" | "timeout" | "unavailable" | "invalid_response" | "no_explicit_content" | null; latency_ms: number };
+export type ContentExtractionConfirmation = { created_nodes: ContentNode[]; created_count: number };

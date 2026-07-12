@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 from pydantic import ValidationError
 
 from app.schemas import StudyPlanRequest, StudyPlanResponse, StudyPlanSession
+from app.services.study_strategy_catalog import planner_activity
 
 logger = logging.getLogger("estudaunb.study_plan")
 
@@ -41,6 +42,7 @@ class RegisteredDiscipline:
     name: str
     priority: int
     priority_influences: list[dict[str, Any]]
+    associated_contents: list[dict[str, Any]]
 
 
 def _now_ms() -> float:
@@ -146,6 +148,7 @@ def list_registered_disciplines(
                 name=name,
                 priority=min(5, base_priority + bonus),
                 priority_influences=priority_influences,
+                associated_contents=record.get("associated_contents", []),
             )
         )
     return disciplines
@@ -539,6 +542,19 @@ def generate_study_plan(
     disciplines = list_registered_disciplines(payload.discipline_ids, registered_records, priority_map)
     plan, warnings, total_minutes = build_baseline_study_plan(payload, disciplines)
     validate_study_plan(plan, payload, disciplines, total_minutes)
+    discipline_by_id = {discipline.id: discipline for discipline in disciplines}
+    used_content_counts: dict[str, int] = {}
+    for session in plan:
+        discipline = discipline_by_id[session["discipline_id"]]
+        index = used_content_counts.get(discipline.id, 0)
+        if index < len(discipline.associated_contents):
+            session["activity"] = planner_activity(discipline.associated_contents[index])
+            used_content_counts[discipline.id] = index + 1
+    for discipline in disciplines:
+        used = used_content_counts.get(discipline.id, 0)
+        if len(discipline.associated_contents) > used:
+            pending = ", ".join(node["title"] for node in discipline.associated_contents[used:])
+            warnings.append(f"Conteúdos associados ficaram pendentes por falta de sessões: {pending}.")
 
     summary, source, explanation_warnings, fallback_reason, llm_latency = generate_plan_explanation(
         payload, disciplines, plan, warnings, llm_client=llm_client

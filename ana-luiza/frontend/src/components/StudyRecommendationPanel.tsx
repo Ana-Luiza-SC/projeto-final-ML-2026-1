@@ -6,6 +6,7 @@ type Props = {
   error?: string | null;
 };
 
+const strategyLabels: Record<string, string> = { retrieval_practice: "Prática de recuperação", spaced_practice: "Prática distribuída", interleaving: "Intercalação", concrete_examples: "Exemplos concretos ou resolvidos", self_explanation: "Autoexplicação" };
 const dedicationLabels = {
   low: "baixa",
   medium: "média",
@@ -49,14 +50,16 @@ export function StudyRecommendationPanel({ recommendation, loading = false, erro
             <strong>{recommendation.attendance_status}</strong>
           </div>
 
-          <div>
+          {(recommendation.study_actions?.length ?? 0) > 0 && <div><h3>Atividades de estudo fundamentadas</h3>{recommendation.study_actions?.map((item, index) => <article className="status-box" key={`${item.strategy_id}-${item.topic}-${index}`}><span>{strategyLabels[item.strategy_id] ?? item.strategy_id}</span><strong>{item.action}</strong>{item.topic && <p><b>Conteúdo:</b> {item.topic}</p>}<p><b>Motivo:</b> {item.reason}</p><p><b>Evidência usada:</b> {item.evidence}</p>{item.estimated_minutes && <p><b>Duração derivada:</b> {item.estimated_minutes} min</p>}<details><summary>Por que esta estratégia?</summary>{item.reference_ids.map(id => recommendation.strategy_references?.find(ref => ref.id === id)).filter(Boolean).map(ref => <p key={ref!.id}><a href={ref!.url} target="_blank" rel="noreferrer">{ref!.short_citation}</a> — {ref!.title}</p>)}</details></article>)}</div>}
+          {(recommendation.study_actions?.length ?? 0) === 0 && <div>
             <h3>Ações recomendadas</h3>
             <ul>{recommendation.recommended_actions.map((action) => <li key={action}>{action}</li>)}</ul>
-          </div>
+          </div>}
           <div>
             <h3>Motivos</h3>
             <ul>{recommendation.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
           </div>
+          {(recommendation.warnings?.length ?? 0) > 0 && <div><h3>Avisos</h3><ul>{recommendation.warnings?.map((item) => <li key={item}>{item}</li>)}</ul></div>}
           {(recommendation.used_evidence?.length ?? 0) > 0 && (
             <div>
               <h3>Evidências usadas</h3>

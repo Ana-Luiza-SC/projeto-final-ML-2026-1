@@ -9,6 +9,9 @@ IMPORT_PREVIEWS: dict[str, dict] = {}
 COURSE_PLAN_PREVIEWS: dict[str, dict] = {}
 COURSE_PLANS: dict[str, dict] = {}
 ABSENCES: dict[str, list[dict]] = {}
+CONTENT_EXTRACTION_PREVIEWS: dict[str, dict] = {}
+CONTENT_NODES: dict[str, dict[str, dict]] = {}
+ASSESSMENT_CONTENT_LINKS: dict[str, list[dict]] = {}
 
 
 def utc_now() -> datetime:
@@ -22,6 +25,7 @@ def create_discipline(payload: dict) -> dict:
     DISCIPLINES[discipline_id] = record
     ASSESSMENTS[discipline_id] = []
     ABSENCES[discipline_id] = []
+    CONTENT_NODES[discipline_id] = {}
     return record
 
 
@@ -156,7 +160,10 @@ def update_assessment(discipline_id: str, assessment_id: str, payload: dict) -> 
 def delete_assessment(discipline_id: str, assessment_id: str) -> bool:
     items = ASSESSMENTS.get(discipline_id, [])
     ASSESSMENTS[discipline_id] = [item for item in items if item["id"] != assessment_id]
-    return len(items) != len(ASSESSMENTS[discipline_id])
+    deleted = len(items) != len(ASSESSMENTS[discipline_id])
+    if deleted:
+        ASSESSMENT_CONTENT_LINKS.pop(assessment_id, None)
+    return deleted
 
 
 def add_absence(discipline_id: str, payload: dict) -> dict:
@@ -186,6 +193,18 @@ def delete_absence(discipline_id: str, absence_id: str) -> bool:
     items = ABSENCES.get(discipline_id, [])
     ABSENCES[discipline_id] = [item for item in items if item["id"] != absence_id]
     return len(items) != len(ABSENCES[discipline_id])
+
+
+def get_content_extraction_preview(preview_id: str) -> dict | None:
+    preview = CONTENT_EXTRACTION_PREVIEWS.get(preview_id)
+    if preview and preview["expires_at"] <= utc_now():
+        CONTENT_EXTRACTION_PREVIEWS.pop(preview_id, None)
+        return None
+    return preview
+
+
+def delete_content_extraction_preview(preview_id: str) -> None:
+    CONTENT_EXTRACTION_PREVIEWS.pop(preview_id, None)
 
 
 def save_course_plan(discipline_id: str, payload: dict) -> dict:

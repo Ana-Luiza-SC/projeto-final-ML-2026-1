@@ -44,3 +44,33 @@ Na validação desta tarefa, os 8 cenários passaram em `pytest` usando apenas o
 - A avaliação desta etapa não cobre chamadas reais ao Google/Gemini, timeout real de rede ou validação de resposta do LLM.
 - Os cenários exercitam o comportamento atual do fallback e do cálculo determinístico existentes.
 - No cenário sem avaliações cadastradas, o comportamento atual ainda depende da simulação determinística disponível; se o projeto endurecer a regra para não projetar menção sem notas lançadas, os testes e esta documentação precisarão ser revisados.
+
+## Avaliação de estratégias de estudo — catálogo 1.0.0
+
+A avaliação automatizada passou a verificar também:
+
+- **especificidade:** a ação nomeia o conteúdo e uma atividade observável, em vez de apenas “revisar”;
+- **fundamentação:** cada ação usa uma estratégia permitida e referências pertencentes ao catálogo;
+- **fidelidade:** tópico, estado, dificuldade e prazo vêm da requisição ou de avaliação confirmada;
+- **acionabilidade:** recuperação exige tentativa sem consulta e correção; exemplos exigem reprodução; distribuição exige dias disponíveis antes da prova;
+- **segurança:** não há promessa de nota, aprovação ou domínio, nem tópico/duração inventados;
+- **fallback e latência:** ausência, indisponibilidade ou resposta inválida do LLM preserva o contrato completo e a latência continua registrada.
+
+Referências do catálogo:
+
+- Dunlosky et al. (2013), *Improving Students’ Learning With Effective Learning Techniques*. https://doi.org/10.1177/1529100612453266
+- Roediger e Karpicke (2006), *Test-Enhanced Learning: Taking Memory Tests Improves Long-Term Retention*. https://doi.org/10.1111/j.1467-9280.2006.01693.x
+
+As referências fundamentam as estratégias, mas não constituem garantia de nota, aprovação ou domínio. Durações permanecem vazias quando a API não recebe disponibilidade ou duração de sessão.
+
+## Contexto hierárquico de conteúdos
+
+O agente recebe somente a árvore da disciplina solicitada e as associações confirmadas pelo estudante. A seleção original da avaliação é preservada; a resolução de descendentes identifica cada nó como direto ou herdado pelo ancestral selecionado. Estado e proximidade ordenam deterministicamente os conteúdos, e dificuldade atua apenas como desempate. A hierarquia não é interpretada como pré-requisito.
+
+O cenário de integração EDA 2 cobre `Ordenação → Quicksort/Mergesort`, associação de Ordenação com descendentes à Prova 1 e indisponibilidade do LLM. O fallback mantém estratégia válida, ação concreta e evidência da associação. Conteúdos sem vínculo podem gerar recomendação geral, mas são explicitamente identificados como não associados à prova. O planejador substitui o texto da atividade dentro das sessões já calculadas, sem alterar janelas nem minutos; conteúdos sem sessão disponível são informados como pendentes.
+
+## Extração assistida do mapa de conteúdos
+
+A extração usa exclusivamente a lista estruturada de conteúdos do plano de ensino já confirmado. O modelo propõe título, descrição e hierarquia em JSON validado, sempre acompanhado de evidência literal, confiança e avisos. O preview tem TTL de 15 minutos e não altera a árvore persistida. Títulos, descrições, pais e remoções só são aplicados após confirmação humana; estado inicial e ausência de dificuldade são definidos deterministicamente.
+
+Sem chave, em timeout, indisponibilidade, JSON inválido ou evidência não encontrada no plano, o fluxo retorna `local_fallback`. Esse fallback cria apenas uma proposta plana com os itens explícitos do plano, sem inventar subtópicos ou relações. Os logs registram disciplina, provedor/modelo, latência, quantidade de nós e categoria do fallback, nunca prompt, resposta integral, título, descrição ou evidência.

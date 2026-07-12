@@ -31,7 +31,8 @@ export function getApiBaseUrl() {
 }
 
 function friendlyError(status: number, detail: unknown): string {
-  if (status === 404) return "Disciplina não encontrada.";
+  if (status === 404) return typeof detail === "string" ? detail : "Recurso não encontrado.";
+  if (status === 409) return typeof detail === "string" ? detail : "A operação conflita com a hierarquia atual.";
   if (status === 400 || status === 422) {
     const detailText = typeof detail === "string" ? detail : "Verifique os dados informados.";
     if (detailText.toLowerCase().includes("nota")) return "Nota deve estar entre 0 e 10.";
@@ -255,3 +256,13 @@ export function sendDisciplineAssistantMessage(id: string, message: string, rece
     body: JSON.stringify({ message, recent_messages: recentMessages.slice(-8).map(({ role, content }) => ({ role, content })), user_goal: userGoal || null }),
   });
 }
+
+export function listContentNodes(disciplineId: string) { return request<import("../types").ContentNode[]>(`/api/disciplines/${disciplineId}/contents`); }
+export function createContentNode(disciplineId: string, payload: import("../types").ContentNodePayload, parentId?: string | null) { const path = parentId ? `/api/disciplines/${disciplineId}/contents/${parentId}/children` : `/api/disciplines/${disciplineId}/contents`; return request<import("../types").ContentNode>(path, { method: "POST", body: JSON.stringify(payload) }); }
+export function updateContentNode(disciplineId: string, nodeId: string, payload: Partial<import("../types").ContentNodePayload>) { return request<import("../types").ContentNode>(`/api/disciplines/${disciplineId}/contents/${nodeId}`, { method: "PATCH", body: JSON.stringify(payload) }); }
+export function moveContentNode(disciplineId: string, nodeId: string, parentId?: string | null) { return request<import("../types").ContentNode>(`/api/disciplines/${disciplineId}/contents/${nodeId}/move`, { method: "POST", body: JSON.stringify({ parent_id: parentId ?? null }) }); }
+export function deleteContentNode(disciplineId: string, nodeId: string) { return request<unknown>(`/api/disciplines/${disciplineId}/contents/${nodeId}`, { method: "DELETE" }); }
+export function getAssessmentContentAssociation(disciplineId: string, assessmentId: string) { return request<import("../types").AssessmentContentAssociation>(`/api/disciplines/${disciplineId}/assessments/${assessmentId}/content-associations`); }
+export function setAssessmentContentAssociation(disciplineId: string, assessmentId: string, selections: import("../types").AssessmentContentSelection[]) { return request<import("../types").AssessmentContentAssociation>(`/api/disciplines/${disciplineId}/assessments/${assessmentId}/content-associations`, { method: "PUT", body: JSON.stringify({ selections }) }); }
+export function previewContentExtraction(disciplineId: string) { return request<import("../types").ContentExtractionPreview>(`/api/disciplines/${disciplineId}/contents/extract-preview`, { method: "POST" }); }
+export function confirmContentExtraction(disciplineId: string, previewId: string, draftNodes: import("../types").ContentDraftNode[]) { return request<import("../types").ContentExtractionConfirmation>(`/api/disciplines/${disciplineId}/contents/confirm-preview`, { method: "POST", body: JSON.stringify({ preview_id: previewId, draft_nodes: draftNodes }) }); }

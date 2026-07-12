@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from fastapi.encoders import jsonable_encoder
 
 from app import storage
-from app.schemas import StudyRecommendationRequest, StudyRecommendationResponse
+from app.schemas import StudyRecommendationRequest, StudyRecommendationResponse, StudyTopicInput
 from app.services.academic_calculator import (
     calculate_attendance,
     calculate_grade_simulation,
     classify_academic_status,
 )
 from app.services.study_recommendation_agent import generate_study_recommendation
+from app.services.content_map import agent_content_context
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -94,15 +96,23 @@ def study_recommendation(payload: StudyRecommendationRequest) -> StudyRecommenda
         "academic_status": academic_status,
         "warnings": warnings,
     }
+    content_context = agent_content_context(str(payload.discipline_id), assessments)
+    status_map = {"studied": "in_progress", "reviewed": "reviewed", "in_progress": "in_progress", "not_started": "not_started"}
+    structured_topics = [StudyTopicInput(title=node["title"], difficulty=node.get("difficulty") or "medium", status=status_map[node["status"]]) for node in content_context["priority_nodes"]]
+    existing_titles = {topic.title.casefold() for topic in structured_topics}
+    effective_topics = structured_topics + [topic for topic in payload.pending_topics if topic.title.casefold() not in existing_titles]
     enriched_discipline = {
         **discipline,
         "assessments": assessments,
         "course_plan": storage.COURSE_PLANS.get(str(payload.discipline_id)),
         "absence_occurrences": storage.list_absences(str(payload.discipline_id)),
+        "content_hierarchy": content_context["tree"],
+        "assessment_content_context": content_context["assessment_contents"],
+        "content_evidence_by_title": content_context["evidence_by_title"],
     }
     return generate_study_recommendation(
         discipline=enriched_discipline,
         simulation=simulation,
-        pending_topics=payload.pending_topics,
+        pending_topics=effective_topics,
         user_goal=payload.user_goal,
     )

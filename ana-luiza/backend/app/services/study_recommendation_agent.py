@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.schemas import DisciplineAssistantResponse, StudyRecommendationResponse, StudyTopicInput
+from app.services.study_strategy_catalog import build_study_actions, strategy_references, validate_study_actions
 
 logger = logging.getLogger("estudaunb.agent")
 
@@ -56,6 +57,20 @@ def _log_event(event: str, **fields: Any) -> None:
     logger.info(json.dumps({"event": event, **safe_fields}, ensure_ascii=False))
 
 
+def _assessment_weight_context(item: dict[str, Any]) -> dict[str, float | None]:
+    group_final = item.get("group_final_weight")
+    group_internal = item.get("group_weight")
+    simple = item.get("weight")
+    def normalized(value):
+        if value is None:
+            return None
+        value = float(value)
+        return value / 100 if value > 1 else value
+    final_value = normalized(group_final)
+    internal_value = normalized(group_internal)
+    effective = final_value * internal_value if final_value is not None and internal_value is not None else normalized(simple)
+    return {"weight": simple, "group_final_weight": group_final, "group_weight": group_internal, "effective_weight": effective}
+
 def build_safe_prompt_context(
     discipline: dict[str, Any],
     simulation: dict[str, Any],
@@ -82,7 +97,7 @@ def build_safe_prompt_context(
                 {
                     "name": _safe_text(item.get("name"), 120),
                     "date": _safe_text(item.get("date"), 20),
-                    "weight": item.get("weight"),
+                    **_assessment_weight_context(item),
                     "topics": [_safe_text(topic, 120) for topic in (item.get("topics") or [])[:10]],
                     "source": item.get("source"),
                 }
@@ -93,7 +108,7 @@ def build_safe_prompt_context(
                 {
                     "name": _safe_text(item.get("name"), 120),
                     "date": None,
-                    "weight": item.get("weight"),
+                    **_assessment_weight_context(item),
                     "topics": [_safe_text(topic, 120) for topic in (item.get("topics") or [])[:10]],
                     "source": item.get("source"),
                     "warning": "Data não informada; não usar para prioridade por proximidade.",
@@ -105,7 +120,7 @@ def build_safe_prompt_context(
                 {
                     "name": _safe_text(item.get("name"), 120),
                     "date": _safe_text(item.get("date"), 20),
-                    "weight": item.get("weight"),
+                    **_assessment_weight_context(item),
                     "grade": item.get("grade"),
                     "topics": [_safe_text(topic, 120) for topic in (item.get("topics") or [])[:10]],
                     "source": item.get("source"),
@@ -128,6 +143,8 @@ def build_safe_prompt_context(
             "academic_status": simulation.get("academic_status", {}),
             "warnings": simulation.get("warnings", []),
         },
+        "content_hierarchy": discipline.get("content_hierarchy", []),
+        "assessment_content_context": discipline.get("assessment_content_context", []),
         "pending_topics": [
             {
                 "title": _safe_text(topic.title, 120),
@@ -156,11 +173,13 @@ def _build_prompt(context: dict[str, Any]) -> str:
         "recommended_actions": [],
         "reasons": [],
         "missing_information": [],
+        "study_actions": [],
     }
     return (
         "Você é o agente de recomendação de estudos do EstudaUnB. "
         "Não recalcule nota, menção ou frequência; use apenas a simulação fornecida. "
         "Não avalie professor, não invente dados do SIGAA, e não afirme aprovação final se houver dados pendentes. "
+        "Não prometa nota, aprovação ou domínio e use somente estratégias e referências fornecidas pelo backend. "
         "Responda apenas JSON válido seguindo este schema: "
         + json.dumps(schema, ensure_ascii=False)
         + "\nContexto seguro: "
@@ -171,6 +190,7 @@ def _build_prompt(context: dict[str, Any]) -> str:
 def validate_llm_response(data: Any, latency_ms: float) -> StudyRecommendationResponse:
     if not isinstance(data, dict):
         raise ValueError("Resposta do LLM não é um objeto JSON.")
+    validate_study_actions(data.get("study_actions"))
     payload = {
         **data,
         "used_fallback": False,
@@ -192,6 +212,8 @@ def validate_llm_response(data: Any, latency_ms: float) -> StudyRecommendationRe
             *response.reasons,
         ]
     ).lower()
+    if "garant" in joined and any(term in joined for term in ("aprova", "nota", "domínio", "dominio")):
+        raise ValueError("Resposta do LLM promete resultado acadêmico.")
     if forbidden in joined:
         raise ValueError("Resposta do LLM afirma aprovação final indevidamente.")
     return response
@@ -269,10 +291,12 @@ def generate_rules_based_recommendation(
     attendance_risk = attendance.get("risk_level")
     active_topics = _count_active_topics(pending_topics)
     difficult_topics = _count_difficult_topics(pending_topics)
+    study_actions = build_study_actions(discipline, pending_topics)
 
     reasons: list[str] = []
     actions: list[str] = []
     missing: list[str] = []
+    missing.append("disponibilidade de estudo")
 
     high_conditions = []
     if frequency is not None and frequency < 0.75:
@@ -341,22 +365,24 @@ def generate_rules_based_recommendation(
     if required is None:
         missing.append("avaliações restantes ou pesos completos")
 
-    if difficult_topics > 0:
-        actions.append("Priorize os conteúdos pendentes marcados como difíceis.")
+    if not pending_topics:
+        missing.append("conteúdos cadastrados")
+        actions.append("Cadastre ao menos um conteúdo com dificuldade e estado para receber uma atividade de estudo específica.")
+    if study_actions:
+        actions.extend(item["action"] for item in study_actions)
     if attendance_risk in {"medium", "high"} or (frequency is not None and frequency < 0.85):
         actions.append("Evite novas faltas, pois sua frequência está próxima ou abaixo do limite mínimo de 75%.")
-    if required is not None and required > 8:
-        actions.append("Revise os conteúdos ligados à próxima avaliação antes de avançar para novos tópicos.")
     if simulation.get("partial_average") is None or simulation.get("completed_weight", 0) == 0:
         actions.append("Cadastre mais avaliações ou pesos para melhorar a precisão da simulação.")
     if not actions:
         actions.append("Mantenha revisões curtas durante a semana e acompanhe novas avaliações cadastradas.")
 
-    grade_status = "Dados de nota insuficientes para simular a menção."
+    grade_status = "Menção final: ainda não calculável." if simulation.get("remaining_weight", 0) > 0 else "Dados de nota insuficientes para calcular a menção final."
     if projected_mention:
-        grade_status = (
-            f"Menção projetada {projected_mention}. Esta é uma situação simulada, não um resultado oficial."
-        )
+        if simulation.get("remaining_weight", 0) > 0:
+            grade_status += f" Projeção para a meta: {projected_mention}; não é resultado final."
+        else:
+            grade_status = f"Menção final calculada: {projected_mention}."
     if required is not None and required > 10:
         grade_status += " A nota necessária restante é maior que 10, então a meta está inalcançável apenas com as avaliações restantes."
 
@@ -401,8 +427,11 @@ def generate_rules_based_recommendation(
         used_fallback=True,
         provider="rules",
         latency_ms=latency_ms,
+        warnings=list(dict.fromkeys(simulation.get("warnings", []))),
         used_evidence=used_evidence,
         influencing_assessments=influencing_assessments,
+        study_actions=study_actions,
+        strategy_references=strategy_references(study_actions),
     )
 
 
@@ -470,6 +499,11 @@ def generate_study_recommendation(
     try:
         raw = generate_google_recommendation(context, timeout_seconds=_env_timeout())
         response = validate_llm_response(raw, latency_ms=_duration_ms(start))
+        deterministic_actions = build_study_actions(discipline, pending_topics)
+        response.study_actions = deterministic_actions
+        response.strategy_references = strategy_references(deterministic_actions)
+        if deterministic_actions:
+            response.recommended_actions = [item["action"] for item in deterministic_actions]
         _log_event(
             "agent_recommendation_generated",
             provider=response.provider,

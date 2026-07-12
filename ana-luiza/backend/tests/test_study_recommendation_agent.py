@@ -1,10 +1,13 @@
 import logging
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app import storage
 from app.main import app
+from app.services.study_recommendation_agent import build_safe_prompt_context
+from app.services import study_recommendation_agent
 
 
 @pytest.fixture(autouse=True)
@@ -164,8 +167,7 @@ def test_difficult_pending_topic_increases_priority(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["dedication_level"] == "high"
-    assert any("difíceis" in action for action in body["recommended_actions"])
+    assert any(item["strategy_id"] in {"concrete_examples", "self_explanation"} for item in body["study_actions"])
 
 
 def test_invalid_difficulty_fails(client):
@@ -230,3 +232,127 @@ def test_openapi_contains_agent_endpoint(client):
     assert response.status_code == 200
     schema = response.json()
     assert "/api/agent/study-recommendation" in schema["paths"]
+
+def test_grouped_assessment_api_to_agent_fallback_is_auditable(client, monkeypatch):
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    discipline = create_discipline(client, total_classes=None, missed_classes=None)
+    created = client.post(f"/api/disciplines/{discipline['id']}/assessments", json={"name": "mTAI", "grade": 8.9, "status": "completed", "evaluation_group_code": "AI", "evaluation_group_name": "Avaliação Individual", "group_final_weight": 40, "group_weight": 60})
+    assert created.status_code == 201
+    simulation = client.get(f"/api/disciplines/{discipline['id']}/academic-simulation").json()
+    assert simulation["completed_weight"] == pytest.approx(.24)
+    assert simulation["current_contribution"] == pytest.approx(2.136)
+    assert simulation["partial_average"] == pytest.approx(8.9)
+    assert simulation["current_mention"] is None
+    response = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"]))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["used_fallback"] is True and body["provider"] == "rules"
+    assert body["used_evidence"] and body["recommended_actions"] and body["reasons"]
+    assert "frequência/faltas" in body["missing_information"]
+    assert "menção final: ainda não calculável" in body["grade_status"].lower()
+
+def test_agent_context_contains_original_and_effective_group_weights():
+    assessment = {"name": "mTAI", "status": "completed", "grade": 8.9, "group_final_weight": 40, "group_weight": 60}
+    context = build_safe_prompt_context({"id": "1", "code": "FGA0001", "name": "Teste", "assessments": [assessment]}, {"completed_weight": .24, "remaining_weight": .76}, [], None)
+    item = context["assessments"]["completed_with_grades"][0]
+    assert item["group_final_weight"] == 40
+    assert item["group_weight"] == 60
+    assert item["effective_weight"] == pytest.approx(.24)
+
+def test_invalid_llm_response_uses_identified_fallback(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-only")
+    monkeypatch.setattr(study_recommendation_agent, "generate_google_recommendation", lambda *_args, **_kwargs: {})
+    discipline = create_discipline(client)
+    add_assessment(client, discipline["id"])
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"])).json()
+    assert body["used_fallback"] is True and body["provider"] == "rules"
+    assert body["used_evidence"] and body["recommended_actions"] and body["reasons"]
+
+def test_unavailable_llm_uses_identified_fallback(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-only")
+    def unavailable(*_args, **_kwargs):
+        raise RuntimeError("provider unavailable")
+    monkeypatch.setattr(study_recommendation_agent, "generate_google_recommendation", unavailable)
+    discipline = create_discipline(client, total_classes=None, missed_classes=None)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"])).json()
+    assert body["used_fallback"] is True and body["provider"] == "rules"
+    assert "frequência/faltas" in body["missing_information"]
+
+def _topic(title="Quicksort", difficulty="medium", status="in_progress"):
+    return {"title": title, "difficulty": difficulty, "status": status}
+
+def test_difficult_topic_gets_concrete_action_and_valid_strategy(client):
+    discipline = create_discipline(client)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[_topic(difficulty="high", status="not_started")])).json()
+    ids = {item["strategy_id"] for item in body["study_actions"]}
+    assert {"concrete_examples", "self_explanation"}.issubset(ids)
+    assert all(item["action"] and item["reason"] and item["evidence"] and item["reference_ids"] for item in body["study_actions"])
+
+def test_studied_topic_gets_retrieval_practice(client):
+    discipline = create_discipline(client)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[_topic()])).json()
+    action = next(item for item in body["study_actions"] if item["strategy_id"] == "retrieval_practice")
+    assert "sem consultar" in action["action"] and "lacunas" in action["action"]
+
+def test_confirmed_assessment_with_several_days_allows_spaced_practice(client):
+    discipline = create_discipline(client)
+    add_assessment(client, discipline["id"], name="P1", grade=None, status="planned", date=str(date.today() + timedelta(days=7)))
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[_topic()])).json()
+    assert any(item["strategy_id"] == "spaced_practice" for item in body["study_actions"])
+
+def test_imminent_exam_does_not_promise_unavailable_spacing(client):
+    discipline = create_discipline(client)
+    add_assessment(client, discipline["id"], name="P1", grade=None, status="planned", date=str(date.today() + timedelta(days=1)))
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[_topic()])).json()
+    assert not any(item["strategy_id"] == "spaced_practice" for item in body["study_actions"])
+    assert any("não há base para prometer espaçamento ideal" in item["reason"] for item in body["study_actions"])
+
+def _valid_llm_payload(study_actions):
+    return {"dedication_level": "medium", "confidence": .7, "academic_situation_summary": "Dados cadastrados analisados.", "grade_status": "Menção final ainda não calculável.", "attendance_status": "Frequência desconhecida.", "recommended_actions": ["Cadastre conteúdo."], "reasons": ["Faltam dados."], "missing_information": ["frequência"], "study_actions": study_actions}
+
+def test_invented_llm_strategy_or_reference_triggers_fallback(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-only")
+    invented = [{"strategy_id": "magic_learning", "action": "Ação", "topic": "GQM", "reason": "Razão", "evidence": "Evidência", "reference_ids": ["invented"]}]
+    monkeypatch.setattr(study_recommendation_agent, "generate_google_recommendation", lambda *_args, **_kwargs: _valid_llm_payload(invented))
+    discipline = create_discipline(client)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[_topic("GQM")])).json()
+    assert body["used_fallback"] is True and all(item["strategy_id"] != "magic_learning" for item in body["study_actions"])
+
+def test_invented_reference_for_valid_strategy_triggers_fallback(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-only")
+    invented = [{"strategy_id": "retrieval_practice", "action": "Ação", "topic": "GQM", "reason": "Razão", "evidence": "Evidência", "reference_ids": ["invented"]}]
+    monkeypatch.setattr(study_recommendation_agent, "generate_google_recommendation", lambda *_args, **_kwargs: _valid_llm_payload(invented))
+    discipline = create_discipline(client)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[_topic("GQM")])).json()
+    assert body["used_fallback"] is True
+
+def test_absence_of_topics_does_not_invent_topic(client):
+    discipline = create_discipline(client)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[])).json()
+    assert body["study_actions"] == []
+    assert "conteúdos cadastrados" in body["missing_information"]
+
+def test_recommendations_never_guarantee_grade_approval_or_mastery(client):
+    discipline = create_discipline(client)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[_topic()])).json()
+    text = " ".join(body["recommended_actions"] + [item["reason"] for item in body["study_actions"]]).lower()
+    assert not any(term in text for term in ("garante aprovação", "garante nota", "garante domínio"))
+
+def test_agent_logs_do_not_store_prompt_response_or_personal_topic(client, caplog):
+    caplog.set_level(logging.INFO, logger="estudaunb.agent")
+    discipline = create_discipline(client)
+    marker = "CPF-000-NOME-COMPLETO"
+    client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[_topic(marker)]))
+    assert marker not in caplog.text
+    assert "contexto seguro" not in caplog.text.lower()
+    assert "study_actions" not in caplog.text
+
+def test_llm_promise_of_approval_triggers_safe_fallback(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-only")
+    payload = _valid_llm_payload([])
+    payload["recommended_actions"] = ["Este método garante aprovação."]
+    monkeypatch.setattr(study_recommendation_agent, "generate_google_recommendation", lambda *_args, **_kwargs: payload)
+    discipline = create_discipline(client)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[_topic()])).json()
+    assert body["used_fallback"] is True
+    assert all("garante aprovação" not in action.lower() for action in body["recommended_actions"])

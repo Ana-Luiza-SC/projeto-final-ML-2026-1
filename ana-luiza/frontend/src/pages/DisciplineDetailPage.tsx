@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   attachSigaaComponent,
   completeAssessment,
@@ -15,6 +15,9 @@ import {
   getDiscipline,
   listAbsences,
   listAssessments,
+  listContentNodes,
+  getAssessmentContentAssociation,
+  setAssessmentContentAssociation,
   previewCoursePlan,
   searchSigaaComponent,
   updateAbsence,
@@ -25,6 +28,7 @@ import { DisciplineAssistantChat } from "../components/DisciplineAssistantChat";
 import { PendingTopicsForm } from "../components/PendingTopicsForm";
 import { SigaaComponentPanel } from "../components/SigaaComponentPanel";
 import { StudyRecommendationPanel } from "../components/StudyRecommendationPanel";
+import { ContentTreePanel } from "../components/ContentTreePanel";
 import type {
   Absence,
   AbsencePayload,
@@ -39,10 +43,13 @@ import type {
   StudyRecommendationResponse,
   StudyTopicInput,
   AttendanceSummary,
+  ContentNode,
+  AssessmentContentSelection,
+  AssessmentContentAssociation,
 } from "../types";
 
 type Props = { disciplineId: string; onBack: () => void };
-type Tab = "overview" | "assessments" | "attendance" | "coursePlan" | "recommendations";
+type Tab = "overview" | "contents" | "assessments" | "attendance" | "coursePlan" | "recommendations";
 type AssessmentAction = "planned" | "completed" | "grade" | "edit" | null;
 type AbsenceAction = "create" | "edit" | null;
 
@@ -51,6 +58,7 @@ const tabLabels: Record<Tab, string> = {
   assessments: "Avaliações",
   attendance: "Frequência",
   coursePlan: "Plano de ensino",
+  contents: "Conteúdos",
   recommendations: "Recomendações",
 };
 
@@ -76,18 +84,40 @@ function textToTopics(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function ContentSelectionEditor({ nodes, selections, onChange }: { nodes: ContentNode[]; selections: AssessmentContentSelection[]; onChange: (value: AssessmentContentSelection[]) => void }) {
+  const selected = new Map(selections.map((item) => [item.content_node_id, item]));
+  function update(nodeId: string, checked: boolean, includeDescendants = false) {
+    const rest = selections.filter((item) => item.content_node_id !== nodeId);
+    onChange(checked ? [...rest, { content_node_id: nodeId, include_descendants: includeDescendants }] : rest);
+  }
+  function rows(items: ContentNode[], depth = 0): ReactNode[] {
+    return items.flatMap((node) => {
+      const selection = selected.get(node.id);
+      return [<div className="content-selection-row" key={node.id} style={{ paddingLeft: depth * 18 }}>
+        <label><input type="checkbox" checked={Boolean(selection)} onChange={(event) => update(node.id, event.target.checked, selection?.include_descendants)} /> {node.title}</label>
+        {selection && node.children.length > 0 && <label><input type="checkbox" checked={selection.include_descendants} onChange={(event) => update(node.id, true, event.target.checked)} /> incluir descendentes</label>}
+      </div>, ...rows(node.children, depth + 1)];
+    });
+  }
+  return <fieldset><legend>Conteúdos associados</legend>{nodes.length ? rows(nodes) : <p className="message muted">Cadastre conteúdos na aba Conteúdos para associá-los.</p>}<p className="muted">{selections.length ? `${selections.length} seleção(ões) original(is).` : "Nenhum conteúdo associado."}</p></fieldset>;
+}
+
 function AssessmentEditor({
   action,
   assessment,
   loading,
+  contentNodes,
+  initialSelections,
   onCancel,
   onSubmit,
 }: {
   action: Exclude<AssessmentAction, null>;
   assessment?: Assessment | null;
   loading: boolean;
+  contentNodes: ContentNode[];
+  initialSelections: AssessmentContentSelection[];
   onCancel: () => void;
-  onSubmit: (payload: AssessmentPayload) => Promise<void>;
+  onSubmit: (payload: AssessmentPayload, selections: AssessmentContentSelection[]) => Promise<void>;
 }) {
   const [name, setName] = useState(assessment?.name ?? "");
   const [date, setDate] = useState(assessment?.date ?? "");
@@ -96,6 +126,7 @@ function AssessmentEditor({
   const [topics, setTopics] = useState(topicsToText(assessment?.topics));
   const [notes, setNotes] = useState(assessment?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [contentSelections, setContentSelections] = useState<AssessmentContentSelection[]>(initialSelections);
 
   const isGradeOnly = action === "grade";
   const isCompleted = action === "completed" || action === "grade" || (action === "edit" && assessment?.status === "completed");
@@ -122,7 +153,7 @@ function AssessmentEditor({
       notes: notes.trim() || null,
       source: assessment?.source ?? "manual",
       status: isCompleted ? "completed" : "planned",
-    });
+    }, contentSelections);
   }
 
   return (
@@ -138,6 +169,7 @@ function AssessmentEditor({
       {isCompleted && <label>Nota<input type="number" min="0" max="10" step="0.1" value={grade} onChange={(event) => setGrade(event.target.value)} /></label>}
       <label>Conteúdo<input value={topics} onChange={(event) => setTopics(event.target.value)} placeholder="Unidade 1, exercícios" /></label>
       <label>Observação<input value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
+      <ContentSelectionEditor nodes={contentNodes} selections={contentSelections} onChange={setContentSelections} />
       <div className="form-actions">
         <button className="secondary-button" type="button" onClick={onCancel}>Cancelar</button>
         <button type="submit" disabled={loading}>{loading ? "Salvando..." : "Salvar"}</button>
@@ -231,6 +263,8 @@ function CoursePlanEditor({ data, onChange }: { data: CoursePlanData; onChange: 
 export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
   const [discipline, setDiscipline] = useState<Discipline | null>(null);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [contentNodes, setContentNodes] = useState<ContentNode[]>([]);
+  const [contentAssociations, setContentAssociations] = useState<Record<string, AssessmentContentAssociation>>({});
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary | null>(null);
   const [coursePlan, setCoursePlan] = useState<CoursePlanData | null>(null);
@@ -262,6 +296,15 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
   const completedAssessments = useMemo(() => assessments.filter((item) => item.status === "completed"), [assessments]);
   const nextAssessment = plannedAssessments[0];
 
+  async function loadContentData(assessmentData: Assessment[]) {
+    const [nodes, associations] = await Promise.all([
+      listContentNodes(disciplineId),
+      Promise.all(assessmentData.map((item) => getAssessmentContentAssociation(disciplineId, item.id))),
+    ]);
+    setContentNodes(nodes);
+    setContentAssociations(Object.fromEntries(associations.map((item) => [item.assessment_id, item])));
+  }
+
   async function loadAll() {
     setLoading(true);
     setError(null);
@@ -271,6 +314,7 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
       ]);
       setDiscipline(disciplineData);
       setAssessments(assessmentData);
+      await loadContentData(assessmentData);
       setAbsences(absenceData);
       setAttendanceSummary(attendanceData);
       setCoursePlan(coursePlanData);
@@ -298,6 +342,7 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
       listAssessments(disciplineId), listAbsences(disciplineId), getAttendanceSummary(disciplineId), getCoursePlan(disciplineId), getAcademicSimulation(disciplineId, Number(targetAverage) || 5),
     ]);
     setAssessments(assessmentData);
+    await loadContentData(assessmentData);
     setAbsences(absenceData);
     setAttendanceSummary(attendanceData);
     setCoursePlan(coursePlanData);
@@ -305,18 +350,20 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
     if (message) setNotice(message);
   }
 
-  async function submitAssessment(payload: AssessmentPayload) {
+  async function submitAssessment(payload: AssessmentPayload, selections: AssessmentContentSelection[]) {
     if (!assessmentAction) return;
     setSaving(true); setError(null); setNotice(null);
     try {
+      let saved: Assessment;
       if (assessmentAction === "grade" && selectedAssessment) {
         if (payload.grade == null) throw new Error("Informe a nota.");
-        await completeAssessment(disciplineId, selectedAssessment.id, { grade: payload.grade, date: payload.date, topics: payload.topics, notes: payload.notes });
+        saved = await completeAssessment(disciplineId, selectedAssessment.id, { grade: payload.grade, date: payload.date, topics: payload.topics, notes: payload.notes });
       } else if (assessmentAction === "edit" && selectedAssessment) {
-        await updateAssessment(disciplineId, selectedAssessment.id, payload);
+        saved = await updateAssessment(disciplineId, selectedAssessment.id, payload);
       } else {
-        await createAssessment(disciplineId, payload);
+        saved = await createAssessment(disciplineId, payload);
       }
+      await setAssessmentContentAssociation(disciplineId, saved.id, selections);
       setAssessmentAction(null); setSelectedAssessment(null);
       await refreshRecords("Avaliação salva.");
     } catch (err) {
@@ -409,6 +456,10 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
         </div>
       )}
 
+      {activeTab === "contents" && (
+        <ContentTreePanel disciplineId={disciplineId} nodes={contentNodes} hasConfirmedPlan={coursePlan != null} loading={loading} onChanged={async () => { setContentNodes(await listContentNodes(disciplineId)); }} />
+      )}
+
       {activeTab === "assessments" && (
         <div className="detail-grid">
           <div className="stack">
@@ -425,7 +476,7 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
             <section className="panel stack"><div className="section-heading"><div><h2>Avaliações realizadas</h2><p>Somente estas, com nota, entram na média atual.</p></div><button type="button" onClick={() => { setSelectedAssessment(null); setAssessmentAction("completed"); }}>Registrar realizada</button></div>{completedAssessments.length === 0 && <p className="message muted">Nenhuma avaliação realizada com nota.</p>}{completedAssessments.map((item) => <div className="status-box" key={item.id}><span>{item.date ?? "sem data"}</span><strong>{item.name} · Nota: {numberText(item.grade)} · Peso global: {numberText(effectiveWeight(item), "%")}</strong><p>{topicsToText(item.topics) || "Conteúdo não informado"}</p><div className="button-row"><button className="secondary-button" type="button" onClick={() => { setSelectedAssessment(item); setAssessmentAction("edit"); }}>Editar</button><button className="secondary-button" type="button" onClick={async () => { await deleteAssessment(disciplineId, item.id); await refreshRecords("Avaliação excluída."); }}>Excluir</button></div></div>)}</section>
           </div>
           <div className="stack">
-            {assessmentAction && <AssessmentEditor key={`${assessmentAction}-${selectedAssessment?.id ?? "new"}`} action={assessmentAction} assessment={selectedAssessment} loading={saving} onCancel={() => { setAssessmentAction(null); setSelectedAssessment(null); }} onSubmit={submitAssessment} />}
+            {assessmentAction && <AssessmentEditor key={`${assessmentAction}-${selectedAssessment?.id ?? "new"}`} action={assessmentAction} assessment={selectedAssessment} loading={saving} contentNodes={contentNodes} initialSelections={selectedAssessment ? contentAssociations[selectedAssessment.id]?.selections ?? [] : []} onCancel={() => { setAssessmentAction(null); setSelectedAssessment(null); }} onSubmit={submitAssessment} />}
             <section className="panel target-panel"><label>Média alvo<input type="number" min="0" max="10" step="0.1" value={targetAverage} onChange={(event) => setTargetAverage(event.target.value)} /></label><button type="button" onClick={() => void loadSimulation()}>Recalcular</button></section>
             <AcademicSimulationPanel simulation={simulation} loading={false} error={null} />
           </div>

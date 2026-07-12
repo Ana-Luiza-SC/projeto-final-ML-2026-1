@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from app import storage
 from app.schemas import StudyPlanRequest, StudyPlanResponse
+from app.services.content_map import agent_content_context
 from app.services.study_plan_agent import (
     StudyPlanInputError,
     StudyPlanOutputError,
@@ -29,7 +30,12 @@ INTERNAL_RESPONSE = {"description": "Erro interno controlado ao gerar o plano."}
 )
 def generate(payload: StudyPlanRequest) -> StudyPlanResponse:
     try:
-        records = [{**item, "assessments": storage.list_assessments(str(item["id"]))} for item in storage.list_disciplines()]
+        records = []
+        for item in storage.list_disciplines():
+            assessments = storage.list_assessments(str(item["id"]))
+            content_context = agent_content_context(str(item["id"]), assessments)
+            associated = [node for group in content_context["assessment_contents"] for node in group["nodes"]]
+            records.append({**item, "assessments": assessments, "associated_contents": associated})
         return generate_study_plan(payload, records)
     except StudyPlanInputError as exc:
         message = str(exc)

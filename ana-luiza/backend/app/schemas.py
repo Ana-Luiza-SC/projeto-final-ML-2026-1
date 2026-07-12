@@ -259,6 +259,23 @@ class StudyRecommendationRequest(BaseModel):
     }
 
 
+class StudyAction(BaseModel):
+    strategy_id: Literal["retrieval_practice", "spaced_practice", "interleaving", "concrete_examples", "self_explanation"]
+    action: str = Field(..., min_length=1)
+    topic: str | None = None
+    estimated_minutes: int | None = Field(default=None, gt=0)
+    reason: str = Field(..., min_length=1)
+    evidence: str = Field(..., min_length=1)
+    reference_ids: list[str] = Field(default_factory=list)
+
+
+class StudyStrategyReference(BaseModel):
+    id: str
+    short_citation: str
+    title: str
+    url: str
+
+
 class StudyRecommendationResponse(BaseModel):
     dedication_level: DedicationLevel
     confidence: float = Field(..., ge=0, le=1)
@@ -271,8 +288,11 @@ class StudyRecommendationResponse(BaseModel):
     used_fallback: bool
     provider: RecommendationProvider
     latency_ms: float = Field(..., ge=0)
+    warnings: list[str] = Field(default_factory=list)
     used_evidence: list[str] = Field(default_factory=list)
     influencing_assessments: list[str] = Field(default_factory=list)
+    study_actions: list[StudyAction] = Field(default_factory=list)
+    strategy_references: list[StudyStrategyReference] = Field(default_factory=list)
 
     model_config = {
         "json_schema_extra": {
@@ -786,3 +806,127 @@ class CoursePlanPreviewResponse(BaseModel):
 class CoursePlanConfirmRequest(BaseModel):
     preview_id: UUID
     data: CoursePlanData
+
+ContentDifficulty = Literal["low", "medium", "high"]
+ContentStatus = Literal["not_started", "in_progress", "studied", "reviewed"]
+
+class ContentNodeCreate(BaseModel):
+    parent_id: UUID | None = None
+    title: str = Field(..., min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    difficulty: ContentDifficulty | None = None
+    status: ContentStatus = "not_started"
+    model_config = {"extra": "forbid"}
+    @field_validator("title", "description")
+    @classmethod
+    def reject_executable_text(cls, value):
+        if value is not None and ("<" in value or ">" in value): raise ValueError("HTML ou conteúdo executável não é permitido.")
+        if isinstance(value, str) and not value.strip(): raise ValueError("O texto não pode ser vazio.")
+        return value.strip() if isinstance(value, str) else value
+
+class ContentNodeUpdate(BaseModel):
+    parent_id: UUID | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    difficulty: ContentDifficulty | None = None
+    status: ContentStatus | None = None
+    model_config = {"extra": "forbid"}
+    @field_validator("title", "description")
+    @classmethod
+    def reject_executable_text(cls, value):
+        if value is not None and ("<" in value or ">" in value): raise ValueError("HTML ou conteúdo executável não é permitido.")
+        if isinstance(value, str) and not value.strip(): raise ValueError("O texto não pode ser vazio.")
+        return value.strip() if isinstance(value, str) else value
+
+class ContentNodeRead(BaseModel):
+    id: UUID
+    discipline_id: UUID
+    parent_id: UUID | None = None
+    title: str
+    description: str | None = None
+    difficulty: ContentDifficulty | None = None
+    status: ContentStatus
+    created_at: datetime
+    children: list["ContentNodeRead"] = Field(default_factory=list)
+
+class ContentMoveRequest(BaseModel):
+    parent_id: UUID | None = None
+
+class AssessmentContentSelection(BaseModel):
+    content_node_id: UUID
+    include_descendants: bool = False
+
+class AssessmentContentAssociationRequest(BaseModel):
+    selections: list[AssessmentContentSelection] = Field(default_factory=list, max_length=100)
+
+class ResolvedContentNode(BaseModel):
+    id: UUID
+    discipline_id: UUID
+    parent_id: UUID | None = None
+    title: str
+    description: str | None = None
+    difficulty: ContentDifficulty | None = None
+    status: ContentStatus
+    created_at: datetime
+    association_origin: Literal["direct", "inherited"]
+    selected_ancestor_id: UUID | None = None
+
+class AssessmentContentAssociationResponse(BaseModel):
+    assessment_id: UUID
+    selections: list[AssessmentContentSelection]
+    resolved_nodes: list[ResolvedContentNode]
+
+
+class ContentDraftNode(BaseModel):
+    temporary_id: str = Field(..., min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    parent_temporary_id: str | None = Field(default=None, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    title: str = Field(..., min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    source_evidence: str = Field(..., min_length=1, max_length=300)
+    confidence: float = Field(..., ge=0, le=1)
+    warnings: list[str] = Field(default_factory=list, max_length=10)
+    model_config = {"extra": "forbid"}
+
+    @field_validator("title", "description", "source_evidence")
+    @classmethod
+    def sanitize_text(cls, value):
+        if value is None:
+            return value
+        clean = " ".join(value.split())
+        if not clean:
+            raise ValueError("O texto não pode ser vazio.")
+        if "<" in clean or ">" in clean:
+            raise ValueError("HTML ou conteúdo executável não é permitido.")
+        return clean
+
+    @field_validator("warnings")
+    @classmethod
+    def sanitize_warnings(cls, values):
+        clean = []
+        for value in values:
+            normalized = " ".join(value.split())[:200]
+            if normalized and "<" not in normalized and ">" not in normalized:
+                clean.append(normalized)
+        return clean
+
+
+class ContentExtractionPreviewResponse(BaseModel):
+    preview_id: UUID
+    expires_at: datetime
+    draft_nodes: list[ContentDraftNode]
+    warnings: list[str]
+    source: Literal["gemini", "local_fallback"]
+    model: str | None = None
+    used_fallback: bool
+    fallback_reason: Literal["missing_api_key", "timeout", "unavailable", "invalid_response", "no_explicit_content"] | None = None
+    latency_ms: float = Field(..., ge=0)
+
+
+class ContentExtractionConfirmRequest(BaseModel):
+    preview_id: UUID
+    draft_nodes: list[ContentDraftNode] = Field(..., max_length=100)
+
+
+class ContentExtractionConfirmResponse(BaseModel):
+    created_nodes: list[ContentNodeRead]
+    created_count: int = Field(..., ge=0)
