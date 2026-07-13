@@ -118,7 +118,7 @@ def calculate_grade_simulation(
         group_average = sum(item["grade"] * item["group_weight"] for item in graded) / internal_weight if complete and internal_weight else None
         group_results.append({"code": group_code, "name": items[0].get("group_name") or group_code, "average": group_average, "status": "calculated" if group_average is not None else "insufficient_data", "meets_minimum_5": group_average >= 5 if group_average is not None else None})
 
-    current_mention = grade_to_mention(partial_average) if partial_average is not None else None
+    current_mention = grade_to_mention(current_contribution) if remaining_weight <= 0.001 and completed_weight > 0 else None
     if remaining_weight == 0:
         projected_average = min(10.0, max(0.0, current_contribution))
     elif required_average_on_remaining is not None and required_average_on_remaining <= 10:

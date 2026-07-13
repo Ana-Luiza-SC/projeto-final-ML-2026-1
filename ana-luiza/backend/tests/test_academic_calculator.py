@@ -115,3 +115,11 @@ def test_does_not_assert_final_approval_when_attendance_unknown():
 
     assert status["status"] == "insufficient_attendance_data"
     assert "não é possível afirmar aprovação final" in status["message"]
+
+def test_grouped_assessment_89_times_40_percent_times_60_percent():
+    result = calculate_grade_simulation([{"name": "mTAI", "grade": 8.9, "group_final_weight": 40, "group_weight": 60, "status": "completed"}])
+    assert result["completed_weight"] == pytest.approx(0.24)
+    assert result["current_contribution"] == pytest.approx(2.136)
+    assert result["partial_average"] == pytest.approx(8.9)
+    assert result["remaining_weight"] == pytest.approx(0.76)
+    assert result["current_mention"] is None

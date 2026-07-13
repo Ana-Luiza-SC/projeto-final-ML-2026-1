@@ -167,7 +167,7 @@ def test_scenario_many_difficult_pending_topics():
     )
 
     assert_common_fallback_response(body, "high")
-    assert any("difíceis" in action for action in body["recommended_actions"])
+    assert any(item["strategy_id"] in {"concrete_examples", "self_explanation"} for item in body["study_actions"])
 
 
 def test_scenario_missing_google_api_key_uses_fallback():
