@@ -32,6 +32,9 @@ import type {
   WeeklyAvailabilityWindow,
   WeeklyPlanPreview,
   WeeklyPlanConfirmResponse,
+  ContextualAssistantRequest,
+  ContextualAssistantResponse,
+  ContextualActionConfirmation,
 } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -271,6 +274,19 @@ export function sendDisciplineAssistantMessage(id: string, message: string, rece
   return request<DisciplineAssistantResponse>(`/api/disciplines/${id}/assistant/messages`, {
     method: "POST",
     body: JSON.stringify({ message, recent_messages: recentMessages.slice(-8).map(({ role, content }) => ({ role, content })), user_goal: userGoal || null }),
+  });
+}
+
+export function sendContextualAssistantMessage(payload: ContextualAssistantRequest) {
+  return request<ContextualAssistantResponse>("/api/assistant/contextual/messages", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function confirmContextualAssistantAction(actionId: string) {
+  return request<ContextualActionConfirmation>(`/api/assistant/actions/${actionId}/confirm`, {
+    method: "POST",
   });
 }
 

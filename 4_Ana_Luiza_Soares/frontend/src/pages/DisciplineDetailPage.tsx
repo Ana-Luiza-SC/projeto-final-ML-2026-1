@@ -5,7 +5,6 @@ import {
   confirmCoursePlan,
   createAbsence,
   createAssessment,
-  createStudyRecommendation,
   deleteAbsence,
   deleteAssessment,
   deleteCoursePlan,
@@ -24,10 +23,7 @@ import {
   updateAssessment,
 } from "../api/client";
 import { AcademicSimulationPanel } from "../components/AcademicSimulationPanel";
-import { DisciplineAssistantChat } from "../components/DisciplineAssistantChat";
-import { PendingTopicsForm } from "../components/PendingTopicsForm";
 import { SigaaComponentPanel } from "../components/SigaaComponentPanel";
-import { StudyRecommendationPanel } from "../components/StudyRecommendationPanel";
 import { ContentTreePanel } from "../components/ContentTreePanel";
 import { CatalogOverview } from "../components/CatalogOverview";
 import type {
@@ -41,8 +37,6 @@ import type {
   Discipline,
   SigaaComponent,
   SigaaComponentSearchResponse,
-  StudyRecommendationResponse,
-  StudyTopicInput,
   AttendanceSummary,
   ContentNode,
   AssessmentContentSelection,
@@ -50,7 +44,7 @@ import type {
 } from "../types";
 
 type Props = { disciplineId: string; onBack: () => void };
-type Tab = "overview" | "contents" | "assessments" | "attendance" | "coursePlan" | "recommendations";
+type Tab = "overview" | "contents" | "assessments" | "attendance" | "coursePlan";
 type AssessmentAction = "planned" | "completed" | "grade" | "edit" | null;
 type AbsenceAction = "create" | "edit" | null;
 
@@ -60,7 +54,6 @@ const tabLabels: Record<Tab, string> = {
   attendance: "Frequência",
   coursePlan: "Plano de ensino",
   contents: "Conteúdos",
-  recommendations: "Recomendações",
 };
 
 function percent(value?: number | null) {
@@ -286,10 +279,7 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
   const [preview, setPreview] = useState<CoursePlanPreviewResponse | null>(null);
   const [previewData, setPreviewData] = useState<CoursePlanData | null>(null);
   const [simulation, setSimulation] = useState<AcademicSimulation | null>(null);
-  const [recommendation, setRecommendation] = useState<StudyRecommendationResponse | null>(null);
   const [sigaaResult, setSigaaResult] = useState<SigaaComponentSearchResponse | null>(null);
-  const [pendingTopics, setPendingTopics] = useState<StudyTopicInput[]>([]);
-  const [userGoal, setUserGoal] = useState("");
   const [targetAverage, setTargetAverage] = useState("5.0");
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [assessmentAction, setAssessmentAction] = useState<AssessmentAction>(null);
@@ -298,12 +288,10 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
   const [selectedAbsence, setSelectedAbsence] = useState<Absence | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [loadingRecommendation, setLoadingRecommendation] = useState(false);
   const [loadingSigaa, setLoadingSigaa] = useState(false);
   const [attachingSigaa, setAttachingSigaa] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [recommendationError, setRecommendationError] = useState<string | null>(null);
   const [sigaaError, setSigaaError] = useState<string | null>(null);
 
   const plannedAssessments = useMemo(() => assessments.filter((item) => item.status === "planned" && item.date).sort((a, b) => String(a.date).localeCompare(String(b.date))), [assessments]);
@@ -397,16 +385,6 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
     finally { setSaving(false); }
   }
 
-  async function handleRecommendation() {
-    setLoadingRecommendation(true); setRecommendationError(null);
-    try {
-      const parsedTarget = Number(targetAverage);
-      const response = await createStudyRecommendation({ discipline_id: disciplineId, target_average: parsedTarget, pending_topics: pendingTopics, user_goal: userGoal.trim() || null });
-      setRecommendation(response);
-    } catch (err) { setRecommendationError(err instanceof Error ? err.message : "Não foi possível gerar recomendação."); }
-    finally { setLoadingRecommendation(false); }
-  }
-
   async function handlePlanPreview(file?: File) {
     if (!file) return;
     setSaving(true); setError(null); setNotice(null);
@@ -459,7 +437,7 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
         <div className="stack">
           <section className="panel overview-assistant">
             <div><p className="eyebrow">Próxima ação</p><h2>{nextAssessment ? `Prepare-se para ${nextAssessment.name}` : "Organize sua próxima etapa"}</h2><p>{nextAssessment?.date ? `Avaliação prevista para ${nextAssessment.date}.` : "Converse com o assistente usando os dados cadastrados."}</p></div>
-            <button type="button" onClick={() => setActiveTab("recommendations")}>Conversar com o assistente</button>
+            <button type="button" onClick={() => window.dispatchEvent(new Event("estudaunb:open-assistant"))}>Conversar com o assistente</button>
           </section>
           <CatalogOverview discipline={discipline} onRefresh={setDiscipline} />
           <section className="overview-cards">
@@ -513,12 +491,6 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
         </div>
       )}
 
-      {activeTab === "recommendations" && (
-        <div className="recommendations-layout">
-          <section className="panel"><label>Objetivo do estudante<input value={userGoal} maxLength={500} onChange={(event) => setUserGoal(event.target.value)} placeholder="Ex.: preparar a prova sem comprometer as outras disciplinas" /></label></section>
-          <DisciplineAssistantChat disciplineId={disciplineId} userGoal={userGoal} />
-        </div>
-      )}
     </div>
   );
 }

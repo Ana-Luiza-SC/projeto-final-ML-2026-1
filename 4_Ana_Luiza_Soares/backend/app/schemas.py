@@ -341,6 +341,92 @@ class DisciplineAssistantResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+ContextualAssistantIntent = Literal[
+    "general",
+    "explain_priority",
+    "recommend_window",
+    "recommend_methods",
+    "propose_study_block",
+    "explain_capacity_shortage",
+]
+ContextualAssistantActionType = Literal[
+    "navigate_to_discipline",
+    "navigate_to_planning",
+    "navigate_to_calendar_date",
+    "explain_priority",
+    "explain_capacity_shortage",
+    "recommend_study_methods",
+    "create_study_block",
+    "modify_unconfirmed_plan",
+]
+
+
+class ContextualAssistantRequest(BaseModel):
+    route: Literal[
+        "home",
+        "disciplines",
+        "discipline",
+        "study-plan",
+        "calendar",
+        "matricula-import",
+    ]
+    message: str = Field(..., min_length=1, max_length=1000)
+    intent: ContextualAssistantIntent = "general"
+    selected_discipline_id: UUID | None = None
+    selected_week_start: Date | None = None
+    selected_event_id: str | None = Field(default=None, max_length=160)
+    selected_priority_id: str | None = Field(default=None, max_length=160)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("message")
+    @classmethod
+    def clean_message(cls, value: str) -> str:
+        cleaned = " ".join(value.strip().split())
+        if "<" in cleaned or ">" in cleaned:
+            raise ValueError("HTML ou conteúdo executável não é permitido.")
+        return cleaned
+
+
+class ContextualAssistantEvidence(BaseModel):
+    source_type: Literal[
+        "assessment",
+        "calendar",
+        "discipline",
+        "priority",
+        "capacity",
+        "study_method_catalog",
+    ]
+    source_id: str | None = None
+    summary: str
+
+
+class ContextualAssistantAction(BaseModel):
+    action_id: UUID | None = None
+    type: ContextualAssistantActionType
+    label: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    requires_confirmation: bool
+
+
+class ContextualAssistantResponse(BaseModel):
+    message: str
+    execution_mode: Literal["deterministic_fallback", "llm"] = (
+        "deterministic_fallback"
+    )
+    evidence: list[ContextualAssistantEvidence] = Field(default_factory=list)
+    suggested_actions: list[ContextualAssistantAction] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    study_method_catalog_version: str | None = None
+
+
+class ContextualActionConfirmationResponse(BaseModel):
+    action_id: UUID
+    action_type: ContextualAssistantActionType
+    status: Literal["executed", "already_executed"]
+    result: dict[str, Any]
+
+
 class StudyPlanTimeWindow(BaseModel):
     day: StudyPlanDay
     start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")

@@ -189,6 +189,10 @@ export default function App() {
       }}
       activePage={route.page}
       onNavigate={(page) => navigate({ page })}
+      selectedDisciplineId={
+        route.page === "discipline" ? route.id : null
+      }
+      onNavigatePath={(path) => navigate(routeFromPath(path))}
     >
       {route.page === "home" && (
         <HomePage

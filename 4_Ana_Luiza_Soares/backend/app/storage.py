@@ -27,6 +27,7 @@ COURSE_PLAN_PREVIEWS: dict[str, dict] = {}
 CONTENT_EXTRACTION_PREVIEWS: dict[str, dict] = {}
 EVENT_EXTRACTION_PREVIEWS: dict[str, dict] = {}
 STUDY_PLAN_PREVIEWS: dict[str, dict] = {}
+ASSISTANT_ACTIONS: dict[str, dict] = {}
 
 
 def utc_now():
@@ -767,3 +768,32 @@ def get_study_plan_preview(study_plan_id: str) -> dict | None:
 
 def delete_study_plan_preview(study_plan_id: str) -> None:
     STUDY_PLAN_PREVIEWS.pop(str(study_plan_id), None)
+
+
+def latest_study_plan_preview() -> dict | None:
+    owned = [
+        preview
+        for preview in STUDY_PLAN_PREVIEWS.values()
+        if preview.get("_owner_id") == _owner()
+    ]
+    return max(
+        owned,
+        key=lambda item: str(item.get("generated_at", "")),
+        default=None,
+    )
+
+
+def save_assistant_action(action: dict) -> dict:
+    stored = {**action, "_owner_id": _owner()}
+    ASSISTANT_ACTIONS[str(stored["action_id"])] = stored
+    return stored
+
+
+def get_assistant_action(action_id: str) -> dict | None:
+    action = ASSISTANT_ACTIONS.get(str(action_id))
+    if not action or action.get("_owner_id") != _owner():
+        return None
+    if action.get("expires_at") and action["expires_at"] <= utc_now():
+        ASSISTANT_ACTIONS.pop(str(action_id), None)
+        return None
+    return action

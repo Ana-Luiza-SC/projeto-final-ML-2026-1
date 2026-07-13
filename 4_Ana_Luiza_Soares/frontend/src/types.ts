@@ -158,6 +158,39 @@ export type AgentExecutionMode = "llm" | "deterministic_fallback";
 export type AssistantMessage = { role: "user" | "assistant"; content: string; evidence?: string[]; suggested_actions?: string[]; warnings?: string[]; source?: "gemini" | "fallback"; execution_mode?: AgentExecutionMode; fallback_reason?: string | null; model?: string | null };
 export type DisciplineAssistantResponse = { status: "success"; source: "gemini" | "fallback"; execution_mode: AgentExecutionMode; fallback_reason?: string | null; model?: string | null; answer: string; evidence: string[]; suggested_actions: string[]; warnings: string[] };
 
+export type ContextualAssistantIntent = "general" | "explain_priority" | "recommend_window" | "recommend_methods" | "propose_study_block" | "explain_capacity_shortage";
+export type ContextualAssistantActionType = "navigate_to_discipline" | "navigate_to_planning" | "navigate_to_calendar_date" | "explain_priority" | "explain_capacity_shortage" | "recommend_study_methods" | "create_study_block" | "modify_unconfirmed_plan";
+export type ContextualAssistantAction = {
+  action_id?: string | null;
+  type: ContextualAssistantActionType;
+  label: string;
+  payload: Record<string, unknown>;
+  requires_confirmation: boolean;
+};
+export type ContextualAssistantResponse = {
+  message: string;
+  execution_mode: "deterministic_fallback" | "llm";
+  evidence: { source_type: string; source_id?: string | null; summary: string }[];
+  suggested_actions: ContextualAssistantAction[];
+  warnings: string[];
+  study_method_catalog_version?: string | null;
+};
+export type ContextualAssistantRequest = {
+  route: "home" | "disciplines" | "discipline" | "study-plan" | "calendar" | "matricula-import";
+  message: string;
+  intent?: ContextualAssistantIntent;
+  selected_discipline_id?: string | null;
+  selected_week_start?: string | null;
+  selected_event_id?: string | null;
+  selected_priority_id?: string | null;
+};
+export type ContextualActionConfirmation = {
+  action_id: string;
+  action_type: ContextualAssistantActionType;
+  status: "executed" | "already_executed";
+  result: { event?: AcademicEvent };
+};
+
 export type StudyAction = { strategy_id: "retrieval_practice" | "spaced_practice" | "interleaving" | "concrete_examples" | "self_explanation"; action: string; topic?: string | null; estimated_minutes?: number | null; reason: string; evidence: string; reference_ids: string[] };
 export type StudyStrategyReference = { id: string; short_citation: string; title: string; url: string };
 

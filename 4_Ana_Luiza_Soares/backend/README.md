@@ -192,3 +192,9 @@ Os dados acadêmicos usam SQLAlchemy e `DATABASE_URL` (resolvido para `backend/d
 O cadastro público não existe no MVP. Na inicialização, `EMAIL_TESTE` e `SENHA_TESTE` criam ou atualizam idempotentemente o usuário restrito; `AUTH_SECRET` assina sessões HMAC. Senhas usam PBKDF2-SHA256 com salt e nunca são registradas.
 
 A busca pública do SIGAA mantém sessão JSF/ViewState, timeout, repetição limitada e intervalo entre consultas. Resultados enriquecidos são sanitizados e gravados com upsert em `catalog_components`; disciplinas do estudante apenas referenciam/copiam os metadados acadêmicos, sem apagar avaliações ou conteúdos. `POST /api/disciplines/{id}/complexity-analysis` analisa somente a disciplina solicitada e persiste o resultado, com fallback auditável.
+
+## Assistente contextual e ações
+
+`POST /api/assistant/contextual/messages` reconstrói o contexto acadêmico no backend a partir de identificadores do usuário e nunca persiste uma sugestão diretamente. Ações mutáveis são enumerações explícitas, temporárias e vinculadas ao proprietário. `POST /api/assistant/actions/{action_id}/confirm` revalida preview, disciplina, conflitos e idempotência antes de criar um bloco.
+
+As sugestões de método usam `app/knowledge/study_methods/study_methods.json`. O JSON é a fonte canônica para máquina; o PDF é evidência humana auditável e não deve ser incorporado na mesma coleção vetorial, evitando conteúdo duplicado. O endpoint contextual funciona em fallback determinístico mesmo sem provedor LLM.

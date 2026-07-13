@@ -165,7 +165,7 @@ Monitoramento mínimo registra latência, fallback, motivo do fallback, eventos 
 
 ## Calendário
 
-Eventos persistidos em `academic_events` têm origem `manual`, `assessment`, `course_plan` ou `system`; estado `draft`, `confirmed`, `cancelled` ou `completed`; tipo `exam`, `assignment`, `presentation`, `activity`, `deadline` ou `other`.
+Eventos persistidos em `academic_events` também distinguem a origem `study_plan` e o tipo `study_block`. Um bloco planejado reserva tempo no calendário; ele não comprova que uma atividade de estudo foi executada.
 
 Regras principais:
 
@@ -173,11 +173,19 @@ Regras principais:
 - editar data, título ou peso da avaliação atualiza a projeção temporal;
 - excluir avaliação cancela o evento vinculado, sem apagar silenciosamente o histórico;
 - evento manual não é sobrescrito por avaliação;
-- plano confirmado gera apenas preview; persistência exige confirmação humana;
+- planejamento semanal gera apenas preview; persistência dos blocos exige confirmação humana;
 - eventos e consultas são isolados por usuário autenticado;
 - timezone padrão: `America/Sao_Paulo`.
 
-A rota protegida `/calendar` mostra calendário mensal, filtros, criação manual, preview de extração e agenda semanal com eventos, sessões de estudo e pendências por falta de capacidade.
+A rota protegida `/study-plan` concentra disponibilidade, prioridades automáticas, explicação de capacidade, preview e confirmação. A rota `/calendar` mostra os blocos confirmados em visões mensal e semanal temporal, sem duplicar o formulário de planejamento.
+
+## Assistente contextual
+
+As páginas autenticadas disponibilizam um drawer recolhível. O frontend envia apenas contexto estruturado, como rota e identificadores selecionados; o backend reconstrói disciplinas, avaliações, prioridades, capacidade, eventos e previews pertencentes ao usuário.
+
+`POST /api/assistant/contextual/messages` é somente leitura. A resposta pode conter ações tipadas. Navegação não altera dados; propostas de mutação recebem um identificador temporário, expiram e só são executadas por `POST /api/assistant/actions/{action_id}/confirm`. Na confirmação, o backend verifica novamente usuário, preview, disciplina, intervalo, conflito e idempotência.
+
+Recomendações de métodos leem `backend/app/knowledge/study_methods/study_methods.json`, fonte canônica versionada. O PDF permanece fonte humana auditável e não é incorporado junto com o JSON na mesma coleção vetorial. Sem LLM, explicações, recomendações e ações seguras continuam disponíveis pelo modo determinístico.
 
 ## Planejamento temporal
 

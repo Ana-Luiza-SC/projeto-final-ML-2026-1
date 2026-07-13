@@ -19,6 +19,7 @@ from app.routers.contents import router as contents_router
 from app.routers.auth import router as auth_router
 from app.routers.catalog import router as catalog_router
 from app.routers.calendar import router as calendar_router
+from app.routers.contextual_assistant import router as contextual_assistant_router
 from app.auth import bootstrap_test_user, decode_token, ensure_user, get_user
 from app.database import current_user_id, init_database
 
@@ -167,4 +168,5 @@ app.include_router(matricula_import_router)
 app.include_router(course_plan_router)
 app.include_router(academic_records_router)
 app.include_router(discipline_assistant_router)
+app.include_router(contextual_assistant_router)
 app.include_router(contents_router)

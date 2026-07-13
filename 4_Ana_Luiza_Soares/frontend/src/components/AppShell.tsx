@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { getApiBaseUrl, type AuthUser } from "../api/client";
+import { ContextualAssistantDrawer } from "./ContextualAssistantDrawer";
 type Page =
   | "home"
   | "disciplines"
@@ -13,7 +14,10 @@ type Props = {
   children: ReactNode;
   user: AuthUser;
   onLogout: () => void;
+  selectedDisciplineId?: string | null;
+  onNavigatePath: (path: string) => void;
 };
+const ASSISTANT_OPEN_KEY = "estudaunb_assistant_open";
 const items: { page: Exclude<Page, "discipline">; label: string }[] = [
   { page: "home", label: "Início" },
   { page: "disciplines", label: "Disciplinas" },
@@ -27,9 +31,32 @@ export function AppShell({
   children,
   user,
   onLogout,
+  selectedDisciplineId,
+  onNavigatePath,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(
+    () => localStorage.getItem(ASSISTANT_OPEN_KEY) === "true",
+  );
   const api = getApiBaseUrl();
+  const closeAssistant = useCallback(() => setAssistantOpen(false), []);
+
+  useEffect(() => {
+    localStorage.setItem(
+      ASSISTANT_OPEN_KEY,
+      assistantOpen ? "true" : "false",
+    );
+  }, [assistantOpen]);
+
+  useEffect(() => {
+    const showAssistant = () => setAssistantOpen(true);
+    window.addEventListener("estudaunb:open-assistant", showAssistant);
+    return () =>
+      window.removeEventListener(
+        "estudaunb:open-assistant",
+        showAssistant,
+      );
+  }, []);
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -75,6 +102,14 @@ export function AppShell({
             </button>
           ))}
         </nav>
+        <button
+          className="assistant-toggle"
+          type="button"
+          aria-expanded={assistantOpen}
+          onClick={() => setAssistantOpen((current) => !current)}
+        >
+          Assistente
+        </button>
         <div className="user-session">
           <span>{user.email}</span>
           <button className="secondary-button" onClick={onLogout}>
@@ -83,6 +118,16 @@ export function AppShell({
         </div>
       </header>
       <main>{children}</main>
+      <ContextualAssistantDrawer
+        open={assistantOpen}
+        route={activePage}
+        disciplineId={selectedDisciplineId}
+        onClose={closeAssistant}
+        onNavigatePath={(path) => {
+          onNavigatePath(path);
+          closeAssistant();
+        }}
+      />
       <footer className="app-footer">
         <span>EstudaUnB · Universidade de Brasília</span>
         <details>

@@ -38,6 +38,7 @@ const WEEKDAYS: { value: StudyPlanDay; label: string }[] = [
 ];
 
 const HOUR_HEIGHT = 56;
+const CALENDAR_FOCUS_KEY = "estudaunb_calendar_focus_date";
 
 function pad(value: number) {
   return String(value).padStart(2, "0");
@@ -45,6 +46,16 @@ function pad(value: number) {
 
 function isoDate(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function initialCalendarDate() {
+  const stored = sessionStorage.getItem(CALENDAR_FOCUS_KEY);
+  sessionStorage.removeItem(CALENDAR_FOCUS_KEY);
+  if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) {
+    const parsed = new Date(`${stored}T12:00:00`);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
 }
 
 function monthStart(date: Date) {
@@ -115,14 +126,15 @@ function laneLayout(events: AcademicEvent[]) {
 }
 
 export function CalendarPage({ onAdjustPlan }: { onAdjustPlan: () => void }) {
+  const [initialDate] = useState(initialCalendarDate);
   const [view, setView] = useState<"month" | "week">("month");
-  const [cursor, setCursor] = useState(() => new Date());
+  const [cursor, setCursor] = useState(initialDate);
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
   const [events, setEvents] = useState<AcademicEvent[]>([]);
   const [disciplineFilter, setDisciplineFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<AcademicEvent | null>(null);
-  const [selectedDay, setSelectedDay] = useState(isoDate(new Date()));
+  const [selectedDay, setSelectedDay] = useState(isoDate(initialDate));
   const [previewDisciplineId, setPreviewDisciplineId] = useState("");
   const [drafts, setDrafts] = useState<CalendarDraftEvent[]>([]);
   const [previewId, setPreviewId] = useState<string | null>(null);
