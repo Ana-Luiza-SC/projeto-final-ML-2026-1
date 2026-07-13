@@ -286,7 +286,31 @@ export function confirmContentExtraction(disciplineId: string, previewId: string
 
 export type AuthUser = { id: string; email: string };
 export type LoginResponse = { access_token: string; token_type: "bearer"; user: AuthUser };
-export type ComplexityAnalysis = { estimated_level: "low" | "medium" | "high"; confidence: number; factors: string[]; syllabus_evidence: string[]; mode: "llm" | "fallback"; model_or_rule_version: string; analyzed_at: string; warnings: string[] };
+export type StudyDemandLevel = "insufficient_evidence" | "low" | "moderate" | "high";
+export type ComplexityAnalysis = {
+  demand_level: StudyDemandLevel;
+  confidence: number;
+  evidence_coverage: number;
+  evidence_used: { type: string; summary: string }[];
+  missing_evidence: string[];
+  factors: {
+    conceptual_breadth: "unknown" | "low" | "moderate" | "high";
+    prerequisite_depth: "unknown" | "low" | "moderate" | "high";
+    mathematical_or_algorithmic_density: "unknown" | "low" | "moderate" | "high";
+    project_workload: "unknown" | "low" | "moderate" | "high";
+    assessment_concentration: "unknown" | "low" | "moderate" | "high";
+  };
+  learner_specific_difficulty: {
+    level: StudyDemandLevel;
+    confidence: number;
+    evidence_used: { type: string; summary: string }[];
+    missing_evidence: string[];
+  };
+  mode: "deterministic_fallback";
+  model_or_rule_version: string;
+  analyzed_at: string;
+  warnings: string[];
+};
 export async function login(email: string, password: string) {
   const result = await request<LoginResponse>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
   localStorage.setItem("estudaunb_token", result.access_token);

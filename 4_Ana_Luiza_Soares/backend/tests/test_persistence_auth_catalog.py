@@ -101,7 +101,7 @@ def test_records_survive_new_database_session(monkeypatch):
         current_user_id.reset(token)
 
 
-def test_catalog_sanitizes_syllabus_and_complexity_is_cached(monkeypatch):
+def test_catalog_sanitizes_syllabus_and_study_demand_is_cached(monkeypatch):
     token = current_user_id.set("catalog-user")
     try:
         component = storage.upsert_catalog_component(
@@ -127,64 +127,81 @@ def test_catalog_sanitizes_syllabus_and_complexity_is_cached(monkeypatch):
 
         first = analyze(discipline["id"])
         second = analyze(discipline["id"])
-        assert (
-            first["mode"] == "fallback"
-            and second["analyzed_at"] == first["analyzed_at"]
-        )
-        assert first["syllabus_evidence"]
+        assert first["mode"] == "deterministic_fallback"
+        assert second["analyzed_at"] == first["analyzed_at"]
+        assert any(item["type"] == "syllabus" for item in first["evidence_used"])
     finally:
         current_user_id.reset(token)
 
 
-def test_complexity_invalid_llm_response_uses_fallback(monkeypatch):
+def test_missing_syllabus_is_insufficient_evidence_not_low_demand(monkeypatch):
     token = current_user_id.set("complexity-invalid-user")
     try:
         storage.COMPLEXITY_ANALYSES.clear()
         discipline = storage.create_discipline(
-            {
-                "code": "FGA0004",
-                "name": "Teste",
-                "syllabus": "Estruturas de dados e algoritmos.",
-            }
+            {"code": "FGA0004", "name": "Teste", "workload_hours": 60}
         )
-        monkeypatch.setenv("GOOGLE_API_KEY", "fake")
-        monkeypatch.setenv("LLM_PROVIDER", "google")
         from app.services.complexity_analysis import analyze
 
-        result = analyze(
-            discipline["id"],
-            True,
-            generator=lambda *_: {
-                "estimated_level": "invented",
-                "syllabus_evidence": ["não existe"],
-            },
-        )
-        assert result["mode"] == "fallback" and result["warnings"]
+        result = analyze(discipline["id"], True)
+        assert result["demand_level"] == "insufficient_evidence"
+        assert result["confidence"] == 0.1
+        assert "ementa" in result["missing_evidence"]
+        assert result["warnings"]
     finally:
         current_user_id.reset(token)
 
 
-def test_complexity_valid_llm_is_structured_and_evidenced(monkeypatch):
+def test_v1_complexity_cache_is_invalidated_and_recomputed(monkeypatch):
     token = current_user_id.set("complexity-valid-user")
     try:
-        syllabus = "Algoritmos de ordenação e análise de complexidade."
+        syllabus = "Algoritmos de ordenação, projeto e análise de complexidade."
         discipline = storage.create_discipline(
             {"code": "FGA0005", "name": "Teste", "syllabus": syllabus}
         )
-        monkeypatch.setenv("GOOGLE_API_KEY", "fake")
-        monkeypatch.setenv("LLM_PROVIDER", "google")
+        storage.COMPLEXITY_ANALYSES[discipline["id"]] = {
+            "estimated_level": "low",
+            "confidence": 0.25,
+            "model_or_rule_version": "complexity-v1",
+            "analyzed_at": storage.utc_now(),
+        }
         from app.services.complexity_analysis import analyze
 
-        result = analyze(
+        result = analyze(discipline["id"])
+        assert result["model_or_rule_version"] == "study-demand-v2"
+        assert "estimated_level" not in result
+        assert result["demand_level"] in {"low", "moderate", "high"}
+    finally:
+        current_user_id.reset(token)
+
+
+def test_learner_specific_difficulty_is_separate_from_course_demand():
+    token = current_user_id.set("study-demand-learner-user")
+    try:
+        storage.DISCIPLINES.clear()
+        storage.ASSESSMENTS.clear()
+        storage.COMPLEXITY_ANALYSES.clear()
+        discipline = storage.create_discipline(
+            {
+                "code": "FGA0006",
+                "name": "Projeto",
+                "syllabus": "Projeto de software com implementação e relatório.",
+            }
+        )
+        storage.add_assessment(
             discipline["id"],
-            True,
-            generator=lambda *_: {
-                "estimated_level": "medium",
-                "confidence": 0.8,
-                "factors": ["análise"],
-                "syllabus_evidence": [syllabus],
+            {
+                "name": "Entrega",
+                "weight": 100,
+                "grade": 3.0,
+                "status": "completed",
             },
         )
-        assert result["mode"] == "llm" and result["syllabus_evidence"] == [syllabus]
+        from app.services.complexity_analysis import analyze
+
+        result = analyze(discipline["id"], True)
+        assert result["learner_specific_difficulty"]["level"] == "high"
+        assert result["demand_level"] != "insufficient_evidence"
+        assert "priority_score" not in result
     finally:
         current_user_id.reset(token)

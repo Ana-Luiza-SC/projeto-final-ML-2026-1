@@ -10,6 +10,28 @@ function hoursText(value?: number | null) {
   return value != null ? `${value}h` : "Não disponível";
 }
 
+const levelLabels = {
+  insufficient_evidence: "Evidência insuficiente",
+  low: "Baixa",
+  moderate: "Moderada",
+  high: "Alta",
+} as const;
+
+const factorLabels = {
+  conceptual_breadth: "Amplitude conceitual",
+  prerequisite_depth: "Profundidade de pré-requisitos",
+  mathematical_or_algorithmic_density: "Densidade matemática ou algorítmica",
+  project_workload: "Carga de projeto",
+  assessment_concentration: "Concentração de avaliações",
+} as const;
+
+const factorValueLabels = {
+  unknown: "desconhecida",
+  low: "baixa",
+  moderate: "moderada",
+  high: "alta",
+} as const;
+
 export function CatalogOverview({
   discipline,
   onRefresh,
@@ -74,7 +96,7 @@ export function CatalogOverview({
       </p>
       <div className="button-row">
         <button disabled={loading} onClick={() => void analyze(false)}>
-          Analisar complexidade
+          Analisar demanda
         </button>
         {analysis && (
           <button
@@ -90,28 +112,41 @@ export function CatalogOverview({
       {analysis && (
         <div className="status-box">
           <span>
-            Complexidade estimada ·{" "}
-            {analysis.mode === "llm" ? "análise assistida" : "regra local"}
+            Demanda estimada de estudo · regra determinística
           </span>
           <strong>
-            {
-              ({ low: "Baixa", medium: "Média", high: "Alta" } as const)[
-                analysis.estimated_level
-              ]
-            }{" "}
-            · confiança {Math.round(analysis.confidence * 100)}%
+            {levelLabels[analysis.demand_level]} · cobertura de evidências{" "}
+            {Math.round(analysis.evidence_coverage * 100)}%
           </strong>
-          <p>{analysis.factors.join("; ")}</p>
-          {analysis.syllabus_evidence.length > 0 && (
-            <details>
-              <summary>Evidências da ementa</summary>
-              <ul>
-                {analysis.syllabus_evidence.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </details>
-          )}
+          <details>
+            <summary>Por quê?</summary>
+            <dl className="demand-factors">
+              {Object.entries(analysis.factors).map(([factor, level]) => (
+                <div key={factor}>
+                  <dt>{factorLabels[factor as keyof typeof factorLabels]}</dt>
+                  <dd>{factorValueLabels[level]}</dd>
+                </div>
+              ))}
+            </dl>
+            {analysis.evidence_used.length > 0 && (
+              <>
+                <h3>Evidências usadas</h3>
+                <ul>
+                  {analysis.evidence_used.map((item) => (
+                    <li key={`${item.type}-${item.summary}`}>{item.summary}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {analysis.missing_evidence.length > 0 && (
+              <p>Dados ausentes: {analysis.missing_evidence.join(", ")}.</p>
+            )}
+            <h3>Dificuldade específica para você</h3>
+            <p>
+              {levelLabels[analysis.learner_specific_difficulty.level]} · cobertura{" "}
+              {Math.round(analysis.learner_specific_difficulty.confidence * 100)}%
+            </p>
+          </details>
           {analysis.warnings.map((w) => (
             <p className="message warning" key={w}>
               {w}
