@@ -344,3 +344,221 @@ def test_mtai_and_items_from_different_groups_keep_effective_weights():
     ])
     assert result["completed_weight"] == pytest.approx(.285)
     assert result["current_contribution"] == pytest.approx(2.76)
+
+
+def test_fga0002_fixture_extracts_full_course_plan():
+    from pathlib import Path
+    from app.services.course_plan import extract_pdf_text_details
+
+    pdf = Path(__file__).resolve().parents[2] / "pdf_exemple" / "plano_ensino_fga0002.pdf"
+    extracted = extract_pdf_text_details(pdf)
+    data, warnings = parse_course_plan_text(extracted.layout_text or extracted.text)
+
+    assert data.code == "FGA0002"
+    assert data.name == "QUALIDADE DE SOFTWARE"
+    assert data.semester == "2026.1"
+    assert data.workload_hours == 60
+    assert len(data.objectives) == 4
+    assert "Diferenciar qualidade de produto" in data.objectives[0]
+    assert len(data.contents) >= 5
+    assert all(f"Unidade {index}" in data.contents[index - 1] for index in range(1, 6))
+    assert len(data.schedule) == 6
+    assert data.schedule[0].startswith("16/03-10/04")
+    assert len(data.bibliography) == 3
+    assert [item.name for item in data.assessments] == [
+        "Questionário de fundamentos",
+        "Plano GQM",
+        "Prova parcial",
+        "Relatório de avaliação",
+        "Apresentação final",
+    ]
+    assert [item.date.isoformat() if item.date else None for item in data.assessments] == [
+        "2026-04-14",
+        "2026-05-19",
+        "2026-06-09",
+        "2026-07-14",
+        "2026-07-16",
+    ]
+    assert [item.weight for item in data.assessments] == [10, 20, 20, 30, 20]
+    assert sum(item.weight or 0 for item in data.assessments) == 100
+    assert data.assessments[-1].associated_content == "Síntese da avaliação"
+    assert all(item.status == "recognized" for item in data.assessments)
+    assert warnings == []
+
+
+def test_flattened_assessment_table_with_decimal_comma_and_missing_date():
+    text = """
+Código: FGA9999
+Componente curricular: TESTE
+Carga horária: 60 horas
+5. Avaliação da aprendizagem
+Avaliação
+Modalidade
+Data
+Peso
+Conteúdo associado
+Prova com vírgula
+Individual
+10/05/2026
+12,5%
+Unidade 1
+Entrega sem data
+Grupo
+20%
+Unidade 2
+6. Cronograma sintético
+"""
+
+    data, warnings = parse_course_plan_text(text)
+
+    assert [item.name for item in data.assessments] == ["Prova com vírgula", "Entrega sem data"]
+    assert data.assessments[0].weight == 12.5
+    assert data.assessments[1].date is None
+    assert data.assessments[1].requires_date is True
+    assert data.assessments[1].associated_content == "Unidade 2"
+    assert any("sem data" in warning for warning in warnings)
+
+
+def test_decorative_pdf_artifacts_are_ignored():
+    text = """
+Código: FGA9999
+Componente curricular: TESTE
+E
+T
+S
+Í
+C
+FI
+O
+I
+2. Objetivos de aprendizagem
+1. Aplicar testes.
+3. Conteúdo programático
+Unidade 1 - Fundamentos
+E
+T
+4. Metodologia de ensino
+5. Avaliação da aprendizagem
+Prova Individual 10/05/2026 100% Unidade 1
+6. Cronograma sintético
+"""
+
+    data, _ = parse_course_plan_text(text)
+
+    assert data.objectives == ["Aplicar testes."]
+    assert data.contents == ["Unidade 1 - Fundamentos"]
+    assert data.assessments[0].name == "Prova"
+
+
+def test_malformed_flattened_table_returns_no_invented_assessment():
+    text = """
+Código: FGA9999
+Componente curricular: TESTE
+5. Avaliação da aprendizagem
+Avaliação
+Modalidade
+Data
+Peso
+Conteúdo associado
+Prova sem peso
+Individual
+10/05/2026
+Unidade 1
+6. Cronograma sintético
+"""
+
+    data, warnings = parse_course_plan_text(text)
+
+    assert data.assessments == []
+    assert any("Nenhuma avaliação" in warning for warning in warnings)
+
+
+def _fake_pdf_text():
+    from app.services.course_plan import ExtractedPdfText
+    return ExtractedPdfText(
+        text="Código: FGA0002\nComponente curricular: QUALIDADE DE SOFTWARE\n5. Avaliação da aprendizagem\nProva Individual 10/05/2026 100% Unidade 1\n6. Cronograma sintético",
+        layout_text="Código: FGA0002\nComponente curricular: QUALIDADE DE SOFTWARE\n5. Avaliação da aprendizagem\nProva Individual 10/05/2026 100% Unidade 1\n6. Cronograma sintético",
+        page_count=1,
+    )
+
+
+def _preview_with_provider(monkeypatch, tmp_path, provider):
+    from app.services import course_plan
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-only")
+    monkeypatch.setenv("LLM_PROVIDER", "google")
+    monkeypatch.setenv("LLM_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "20")
+    monkeypatch.setattr(course_plan, "extract_pdf_text_details", lambda _path: _fake_pdf_text())
+    monkeypatch.setattr(course_plan, "generate_google_json", provider)
+    pdf = tmp_path / "plano.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    return course_plan.build_preview(pdf, "discipline-id", filename="plano.pdf")
+
+
+def test_intelligent_extraction_success_with_mocked_provider(monkeypatch, tmp_path):
+    def provider(prompt, timeout):
+        assert "Código: FGA0002" in prompt
+        assert timeout == 20
+        return {
+            "code": "FGA0002",
+            "name": "QUALIDADE DE SOFTWARE",
+            "semester": "2026.1",
+            "workload_hours": 60,
+            "objectives": [],
+            "contents": [],
+            "schedule": [],
+            "evaluation_groups": [],
+            "assessments": [{"name": "Prova", "date": "2026-05-10", "weight": 100, "associated_content": "Unidade 1", "topics": ["Unidade 1"], "status": "recognized"}],
+            "bibliography": [],
+        }
+
+    response = _preview_with_provider(monkeypatch, tmp_path, provider)
+
+    assert response.source == "gemini"
+    assert response.model == "gemini-2.5-flash"
+    assert response.fallback_reason is None
+    assert response.data.assessments[0].associated_content == "Unidade 1"
+
+
+@pytest.mark.parametrize(
+    ("provider", "reason"),
+    [
+        (lambda _prompt, _timeout: (_ for _ in ()).throw(TimeoutError("llm_timeout")), "provider_timeout"),
+        (lambda _prompt, _timeout: (_ for _ in ()).throw(RuntimeError("provider_error")), "provider_error"),
+        (lambda _prompt, _timeout: "```json\n{not-json}\n```", "invalid_json"),
+        (lambda _prompt, _timeout: [], "invalid_structured_response"),
+        (lambda _prompt, _timeout: {"assessments": [{"name": "X", "weight": 999}]}, "schema_validation_error"),
+    ],
+)
+def test_intelligent_extraction_failures_fall_back_safely(monkeypatch, tmp_path, provider, reason):
+    response = _preview_with_provider(monkeypatch, tmp_path, provider)
+
+    assert response.source == "local_parser"
+    assert response.model is None
+    assert response.fallback_reason == reason
+    assert response.data.code == "FGA0002"
+    assert response.data.assessments[0].name == "Prova"
+    assert any("parser local" in warning for warning in response.warnings)
+
+
+def test_pdf_with_no_recognizable_evaluations_warns():
+    data, warnings = parse_course_plan_text("Código: FGA0001\nComponente curricular: TESTE\n2. Objetivos de aprendizagem\n1. Aprender.")
+
+    assert data.assessments == []
+    assert any("Nenhuma avaliação" in warning for warning in warnings)
+
+
+def test_preview_does_not_store_raw_pdf_or_extracted_text(monkeypatch, tmp_path):
+    from app.services import course_plan
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setattr(course_plan, "extract_pdf_text_details", lambda _path: _fake_pdf_text())
+    pdf = tmp_path / "plano.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    response = course_plan.build_preview(pdf, "discipline-id", filename="plano.pdf")
+    stored = storage.COURSE_PLAN_PREVIEWS[str(response.preview_id)]
+
+    assert "pdf_text" not in stored
+    assert "raw_pdf" not in stored
+    assert "file" not in stored
+    assert stored["data"]["code"] == "FGA0002"

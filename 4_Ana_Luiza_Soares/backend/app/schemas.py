@@ -939,6 +939,7 @@ class CoursePlanAssessment(BaseModel):
     group_weight: float | None = Field(default=None, gt=0, le=100)
     requires_date: bool = False
     description: str | None = None
+    associated_content: str | None = None
     source_page: int | None = Field(default=None, ge=1)
     topics: list[str] = Field(default_factory=list)
     status: Literal["recognized", "requires_review"] = "recognized"
@@ -965,6 +966,7 @@ class CoursePlanPreviewResponse(BaseModel):
     warnings: list[str]
     source: Literal["gemini", "local_parser"] = "local_parser"
     model: str | None = None
+    fallback_reason: Literal["missing_api_key", "provider_timeout", "provider_error", "unsupported_model", "invalid_json", "invalid_structured_response", "schema_validation_error", "empty_extracted_text", "internal_error"] | None = None
     evaluation_group_count: int = 0
     evaluation_component_count: int = 0
 

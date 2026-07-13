@@ -31,7 +31,7 @@ async def preview_course_plan(discipline_id: UUID, file: UploadFile = File(...))
                 if total > 10 * 1024 * 1024:
                     raise CoursePlanError("PDF acima de 10 MiB.")
                 temp.write(chunk)
-        return build_preview(path, str(discipline_id))
+        return build_preview(path, str(discipline_id), filename=file.filename)
     except CoursePlanError as exc:
         raise HTTPException(422, str(exc)) from exc
     finally:
@@ -64,7 +64,7 @@ def confirm_course_plan(discipline_id: UUID, payload: CoursePlanConfirmRequest):
                 "code": assessment.code, "evaluation_group_code": assessment.group_code,
                 "evaluation_group_name": assessment.group_name, "group_final_weight": assessment.group_final_weight,
                 "group_weight": assessment.group_weight, "requires_date": assessment.date is None,
-                "description": assessment.description, "source_page": assessment.source_page,
+                "description": assessment.description, "associated_content": assessment.associated_content, "source_page": assessment.source_page,
                 "source": "course_plan", "status": "planned",
             })
     storage.COURSE_PLAN_PREVIEWS.pop(str(payload.preview_id), None)

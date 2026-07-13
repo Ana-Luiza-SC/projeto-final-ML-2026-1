@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -222,6 +223,19 @@ def validate_llm_response(data: Any, latency_ms: float) -> StudyRecommendationRe
     return response
 
 
+
+
+def _extract_json_text(value: str) -> str:
+    text = value.strip()
+    fenced = re.search(r"```(?:json)?\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
+    if fenced:
+        return fenced.group(1).strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        return text[start:end + 1]
+    return text
+
 def generate_google_recommendation(
     context: dict[str, Any],
     timeout_seconds: float,
@@ -256,12 +270,19 @@ def generate_google_json(prompt: str, timeout_seconds: float) -> dict[str, Any]:
             response_payload = json.loads(response.read().decode("utf-8"))
     except TimeoutError as exc:
         raise TimeoutError("llm_timeout") from exc
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise RuntimeError("unsupported_model") from exc
+        raise RuntimeError("provider_error") from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError("llm_failed") from exc
+        raise RuntimeError("provider_error") from exc
 
     try:
         text = response_payload["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text)
+        data = json.loads(_extract_json_text(text))
+        if not isinstance(data, dict):
+            raise ValueError("llm_invalid_response")
+        return data
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
         raise ValueError("llm_invalid_response") from exc
 

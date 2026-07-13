@@ -71,6 +71,7 @@ export type AssessmentPayload = {
   group_weight?: number | null;
   requires_date?: boolean;
   description?: string | null;
+  associated_content?: string | null;
   source_page?: number | null;
 };
 
@@ -286,6 +287,7 @@ export type CoursePlanAssessment = {
   group_weight?: number | null;
   requires_date?: boolean;
   description?: string | null;
+  associated_content?: string | null;
   source_page?: number | null;
 };
 
@@ -310,6 +312,7 @@ export type CoursePlanPreviewResponse = {
   warnings: string[];
   source: "gemini" | "local_parser";
   model?: string | null;
+  fallback_reason?: "missing_api_key" | "provider_timeout" | "provider_error" | "unsupported_model" | "invalid_json" | "invalid_structured_response" | "schema_validation_error" | "empty_extracted_text" | "internal_error" | null;
   evaluation_group_count: number;
   evaluation_component_count: number;
 };
