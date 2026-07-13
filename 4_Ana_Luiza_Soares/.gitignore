@@ -5,7 +5,6 @@ backend/app/cache/*.json
 /venv
 
 # Dados pessoais e uploads — nunca commitar
-*.pdf
 *.db
 *.sqlite
 *.sqlite3
