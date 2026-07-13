@@ -3,6 +3,7 @@ import { createStudyPlan, listDisciplines } from "../api/client";
 import type { Discipline, StudyPlanDay, StudyPlanResponse, StudyPlanTimeWindow } from "../types";
 import { EmptyState, PageHeader, StatusBadge } from "../components/ui";
 
+const planFallbackLabels: Record<string, string> = { missing_api_key: "IA não configurada; o plano e o resumo usam regras determinísticas.", unsupported_provider: "Provedor não suportado; foram usadas regras determinísticas.", timeout: "O modelo excedeu o tempo; o plano determinístico foi preservado.", invalid_response: "A explicação do modelo foi rejeitada; o plano determinístico foi preservado.", provider_unavailable: "O provedor está indisponível; o plano determinístico foi preservado." };
 const DAYS: { value: StudyPlanDay; label: string }[] = [
   { value: "monday", label: "Segunda" },
   { value: "tuesday", label: "Terça" },
@@ -235,10 +236,11 @@ export function StudyPlanPage() {
           {plan && (
             <div className="study-plan-output">
               <p>{plan.summary}</p>
+              {plan.source === "deterministic_fallback" && <p className="message muted">{planFallbackLabels[plan.fallback_reason ?? ""] ?? "Explicação produzida pelo fallback determinístico."}</p>}
               <div className="metrics-grid">
                 <div><span>Minutos alocados</span><strong>{plan.metrics.allocated_minutes}</strong></div>
                 <div><span>Sessões</span><strong>{plan.metrics.session_count}</strong></div>
-                <div><span>Método</span><strong>{plan.source === "llm_assisted" ? "Assistido" : "Regras acadêmicas"}</strong></div>
+                <div><span>Método</span><strong>{plan.source === "llm_assisted" ? "Assistido por LLM" : "Regras determinísticas"}</strong></div>
               </div>
               {plan.warnings.length > 0 && (
                 <div className="warnings">
@@ -254,6 +256,8 @@ export function StudyPlanPage() {
                       <div className="study-session" key={`${session.day}-${session.sequence}-${session.discipline_id}-${session.duration_minutes}`}>
                         <strong>{session.discipline_code} · {session.discipline_name}</strong>
                         <span>{session.start_time && session.end_time ? `${session.start_time} às ${session.end_time}` : `Sessão ${session.sequence}`} · {session.duration_minutes} min</span>
+                        {session.scheduled_date && <span>Data: {session.scheduled_date}{session.assessment_name ? ` · prepara ${session.assessment_name} (${session.assessment_date})` : ""}</span>}
+                        {session.evidence && <small>{session.evidence}</small>}
                         <p>{session.activity}</p>
                       </div>
                     ))}

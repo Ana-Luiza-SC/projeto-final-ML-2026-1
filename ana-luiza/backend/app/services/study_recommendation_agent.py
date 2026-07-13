@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.schemas import DisciplineAssistantResponse, StudyRecommendationResponse, StudyTopicInput
+from app.schemas import DisciplineAssistantResponse, StudyAction, StudyRecommendationResponse, StudyStrategyReference, StudyTopicInput
 from app.services.study_strategy_catalog import build_study_actions, strategy_references, validate_study_actions
 
 logger = logging.getLogger("estudaunb.agent")
@@ -195,6 +195,9 @@ def validate_llm_response(data: Any, latency_ms: float) -> StudyRecommendationRe
         **data,
         "used_fallback": False,
         "provider": "google",
+        "execution_mode": "llm",
+        "fallback_reason": None,
+        "model": os.getenv("LLM_MODEL", "gemini-2.5-flash"),
         "latency_ms": latency_ms,
     }
     try:
@@ -280,6 +283,7 @@ def generate_rules_based_recommendation(
     simulation: dict[str, Any],
     pending_topics: list[StudyTopicInput],
     latency_ms: float = 0,
+    fallback_reason: str | None = None,
 ) -> StudyRecommendationResponse:
     attendance = simulation.get("attendance") or {}
     academic_status = simulation.get("academic_status") or {}
@@ -426,6 +430,9 @@ def generate_rules_based_recommendation(
         missing_information=list(dict.fromkeys(missing)),
         used_fallback=True,
         provider="rules",
+        execution_mode="deterministic_fallback",
+        fallback_reason=fallback_reason,
+        model=None,
         latency_ms=latency_ms,
         warnings=list(dict.fromkeys(simulation.get("warnings", []))),
         used_evidence=used_evidence,
@@ -462,6 +469,7 @@ def generate_study_recommendation(
             simulation,
             pending_topics,
             latency_ms=_duration_ms(start),
+            fallback_reason=error_type,
         )
         _log_event(
             "fallback_used",
@@ -500,8 +508,8 @@ def generate_study_recommendation(
         raw = generate_google_recommendation(context, timeout_seconds=_env_timeout())
         response = validate_llm_response(raw, latency_ms=_duration_ms(start))
         deterministic_actions = build_study_actions(discipline, pending_topics)
-        response.study_actions = deterministic_actions
-        response.strategy_references = strategy_references(deterministic_actions)
+        response.study_actions = [StudyAction.model_validate(item) for item in deterministic_actions]
+        response.strategy_references = [StudyStrategyReference.model_validate(item) for item in strategy_references(deterministic_actions)]
         if deterministic_actions:
             response.recommended_actions = [item["action"] for item in deterministic_actions]
         _log_event(
@@ -527,7 +535,7 @@ def generate_study_recommendation(
     except Exception as exc:
         _log_event("llm_failed", provider="google", used_fallback=False, error_type=type(exc).__name__, discipline_id=discipline_id)
         if fallback_enabled:
-            return fallback("llm_failed")
+            return fallback("provider_unavailable")
         raise
 
 INSUFFICIENT_DATA = "Não há dados suficientes cadastrados para responder com segurança."
@@ -540,58 +548,98 @@ def generate_discipline_assistant_message(discipline, simulation, message, recen
     completed = context["assessments"]["completed_with_grades"]
     attendance = context["simulation"].get("attendance") or {}
     course_plan = context["course_plan"]
+    assessment_contents = context.get("assessment_content_context") or []
+    hierarchy = context.get("content_hierarchy") or []
 
-    def fallback():
+    def flatten(nodes):
+        return [item for node in nodes for item in [node, *flatten(node.get("children", []))]]
+
+    all_nodes = flatten(hierarchy)
+
+    def fallback(reason: str):
         question = message.casefold()
         evidence, actions, warnings = [], [], []
         if any(term in question for term in ("falta", "frequência", "frequencia")):
             frequency = attendance.get("frequency")
             if frequency is None:
-                return DisciplineAssistantResponse(source="fallback", answer=INSUFFICIENT_DATA, warnings=["Cadastre a carga horária para calcular a frequência."])
-            answer = f"Sua frequência calculada é {frequency * 100:.1f}%."
-            evidence = [f"Fonte: cálculo acadêmico — frequência de {frequency * 100:.1f}%"]
-            actions = ["Evite novas faltas e acompanhe o saldo na aba Frequência."]
+                answer = INSUFFICIENT_DATA
+                warnings = ["Cadastre a carga horária para calcular a frequência."]
+            else:
+                answer = f"Sua frequência calculada é {frequency * 100:.1f}%."
+                evidence = [f"Fonte: cálculo acadêmico — frequência de {frequency * 100:.1f}%"]
+                actions = ["Evite novas faltas e acompanhe o saldo na aba Frequência."]
         elif any(term in question for term in ("nota", "média", "media", "tirar")):
             required = context["simulation"].get("required_average_on_remaining")
             if not completed or required is None:
-                return DisciplineAssistantResponse(source="fallback", answer=INSUFFICIENT_DATA, warnings=["Cadastre avaliações realizadas, pesos e notas."])
-            answer = f"A simulação indica média {required:.2f} no peso restante para atingir a média alvo."
-            evidence = [f"Fonte: cálculo acadêmico — nota necessária {required:.2f}"]
-            actions = ["Confira os pesos em Ver cálculo completo."]
-        elif any(term in question for term in ("conteúdo", "conteudo", "revis")):
-            contents = course_plan.get("contents") or []
-            topics = [topic for item in planned + undated for topic in item.get("topics", [])]
-            available = list(dict.fromkeys(topics + contents))[:5]
-            if not available:
-                return DisciplineAssistantResponse(source="fallback", answer=INSUFFICIENT_DATA, warnings=["Cadastre conteúdos ou confirme um plano de ensino."])
-            answer = "Revise os conteúdos confirmados: " + ", ".join(available) + "."
-            evidence = ["Fonte: plano de ensino confirmado" if contents else "Fonte: avaliação cadastrada manualmente"]
-            actions = [f"Revisar {item}." for item in available[:3]]
+                answer = INSUFFICIENT_DATA
+                warnings = ["Cadastre avaliações realizadas, pesos e notas."]
+            else:
+                answer = f"A simulação indica média {required:.2f} no peso restante para atingir a média alvo."
+                evidence = [f"Fonte: cálculo acadêmico — nota necessária {required:.2f}"]
+                actions = ["Confira os pesos em Ver cálculo completo."]
         elif planned:
             item = planned[0]
-            source = "plano de ensino confirmado" if item.get("source") == "course_plan" else "avaliação cadastrada manualmente"
+            linked = next((group for group in assessment_contents if group.get("assessment_name") == item["name"]), None)
+            node_names = [node["title"] for node in (linked or {}).get("nodes", [])][:4]
             answer = f"A prioridade mais próxima é {item['name']}, prevista para {item['date']}."
-            evidence = [f"Fonte: {source} — {item['name']} em {item['date']}"]
-            actions = ["Distribua revisões curtas dos conteúdos confirmados até a avaliação."]
+            if node_names:
+                answer += " Conteúdos associados: " + ", ".join(node_names) + "."
+            evidence = [f"Fonte: avaliação confirmada — {item['name']} em {item['date']}"]
+            for node in (linked or {}).get("nodes", [])[:4]:
+                origin = "direta" if node.get("association_origin") == "direct" else "herdada pelo ancestral selecionado"
+                evidence.append(f"{node['title']}: associação {origin}; estado {node.get('status')}; dificuldade {node.get('difficulty') or 'não informada'}.")
+            actions = [f"Priorize {name} antes de {item['date']}." for name in node_names[:3]] or ["Associe conteúdos à avaliação para obter ações específicas."]
+        elif all_nodes or any(term in question for term in ("conteúdo", "conteudo", "revis", "estud", "prior")):
+            contents = [node.get("title") for node in all_nodes if node.get("title")]
+            contents += course_plan.get("contents") or []
+            available = list(dict.fromkeys(contents))[:5]
+            if not available:
+                answer = INSUFFICIENT_DATA
+                warnings = ["Cadastre conteúdos ou confirme um plano de ensino."]
+            else:
+                answer = "Conteúdos confirmados disponíveis para estudo: " + ", ".join(available) + "."
+                evidence = ["Fonte: mapa hierárquico da disciplina" if all_nodes else "Fonte: plano de ensino confirmado"]
+                actions = [f"Defina estado e dificuldade de {item} para refinar a prioridade." for item in available[:3]]
         elif undated:
             item = undated[0]
-            source = "plano de ensino confirmado" if item.get("source") == "course_plan" else "avaliação cadastrada manualmente"
             answer = "Foi identificada uma avaliação no plano de ensino, mas a data ainda não foi informada." if item.get("source") == "course_plan" else "Há uma avaliação cadastrada, mas a data ainda não foi informada."
-            evidence = [f"Fonte: {source} — {item['name']}; data não informada"]
+            evidence = [f"Fonte: avaliação confirmada — {item['name']}; data não informada"]
             actions = ["Defina a data na aba Avaliações para habilitar a prioridade por proximidade."]
         else:
-            return DisciplineAssistantResponse(source="fallback", answer=INSUFFICIENT_DATA, warnings=["Cadastre uma avaliação futura ou conteúdos."])
-        return DisciplineAssistantResponse(source="fallback", answer=answer, evidence=evidence, suggested_actions=actions, warnings=warnings)
+            answer = INSUFFICIENT_DATA
+            warnings = ["Cadastre uma avaliação futura ou conteúdos."]
+        return DisciplineAssistantResponse(
+            source="fallback",
+            execution_mode="deterministic_fallback",
+            fallback_reason=reason,
+            model=None,
+            answer=answer,
+            evidence=evidence,
+            suggested_actions=actions,
+            warnings=warnings,
+        )
 
-    if os.getenv("LLM_PROVIDER", "google").strip().lower() != "google" or not os.getenv("GOOGLE_API_KEY"):
-        return fallback()
+    provider = os.getenv("LLM_PROVIDER", "google").strip().lower()
+    if provider != "google":
+        return fallback("unsupported_provider")
+    if not os.getenv("GOOGLE_API_KEY"):
+        return fallback("missing_api_key")
     schema = {"answer": "", "evidence": [], "suggested_actions": [], "warnings": []}
     prompt = "Responda em português e somente JSON. Use apenas o contexto. Não invente dados nem afirme resultado definitivo. Se faltar evidência, responda exatamente: " + INSUFFICIENT_DATA + ". Schema: " + json.dumps(schema, ensure_ascii=False) + "\nContexto: " + json.dumps(context, ensure_ascii=False) + "\nHistórico: " + json.dumps(recent_messages[-8:], ensure_ascii=False) + "\nPergunta: " + _safe_text(message, 1000)
     try:
-        response = DisciplineAssistantResponse(source="gemini", **generate_google_json(prompt, _env_timeout()))
+        response = DisciplineAssistantResponse(source="gemini", execution_mode="llm", fallback_reason=None, model=os.getenv("LLM_MODEL", "gemini-2.5-flash"), **generate_google_json(prompt, _env_timeout()))
         if not response.evidence and response.answer != INSUFFICIENT_DATA:
             raise ValueError("assistant_response_without_evidence")
         return response
+    except TimeoutError as exc:
+        reason = "timeout"
+        _log_event("assistant_fallback_used", discipline_id=str(discipline.get("id", "")), error_type=reason)
+        return fallback(reason)
+    except ValueError as exc:
+        reason = "invalid_response"
+        _log_event("assistant_fallback_used", discipline_id=str(discipline.get("id", "")), error_type=reason)
+        return fallback(reason)
     except Exception as exc:
-        _log_event("assistant_fallback_used", discipline_id=str(discipline.get("id", "")), error_type=type(exc).__name__)
-        return fallback()
+        reason = "provider_unavailable"
+        _log_event("assistant_fallback_used", discipline_id=str(discipline.get("id", "")), error_type=reason)
+        return fallback(reason)

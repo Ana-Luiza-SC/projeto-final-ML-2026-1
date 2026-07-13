@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 from pydantic import ValidationError
 
 from app.schemas import StudyPlanRequest, StudyPlanResponse, StudyPlanSession
+from app.services.academic_time import local_today, next_date_for_weekday
 from app.services.study_strategy_catalog import planner_activity
 
 logger = logging.getLogger("estudaunb.study_plan")
@@ -43,6 +44,7 @@ class RegisteredDiscipline:
     priority: int
     priority_influences: list[dict[str, Any]]
     associated_contents: list[dict[str, Any]]
+    partial_average: float | None
 
 
 def _now_ms() -> float:
@@ -101,7 +103,7 @@ def _window_minutes(window: Any) -> int:
 
 def _ordered_days(days: list[str]) -> list[str]:
     selected = set(days)
-    return [day for day in DAY_ORDER if day in selected]
+    return sorted(selected, key=lambda day: (next_date_for_weekday(day), DAY_ORDER.index(day)))
 
 
 def list_registered_disciplines(
@@ -126,7 +128,7 @@ def list_registered_disciplines(
             if assessment.get("weight") is None and not assessment.get("topics"):
                 continue
             assessment_date = assessment["date"] if isinstance(assessment["date"], date) else date.fromisoformat(str(assessment["date"]))
-            days = (assessment_date - date.today()).days
+            days = (assessment_date - local_today()).days
             assessment_bonus = 2 if 0 <= days <= 7 else 1 if 8 <= days <= 14 else 0
             if assessment_bonus:
                 bonus = max(bonus, assessment_bonus)
@@ -149,13 +151,22 @@ def list_registered_disciplines(
                 priority=min(5, base_priority + bonus),
                 priority_influences=priority_influences,
                 associated_contents=record.get("associated_contents", []),
+                partial_average=record.get("partial_average"),
             )
         )
     return disciplines
 
 
-def _discipline_sort_key(item: RegisteredDiscipline) -> tuple[int, str, str]:
-    return (-item.priority, item.code, item.id)
+def _discipline_sort_key(item: RegisteredDiscipline) -> tuple:
+    deadlines = [date.fromisoformat(str(task["assessment_date"])) for task in item.associated_contents if task.get("assessment_date")]
+    nearest = min(deadlines).toordinal() if deadlines else date.max.toordinal()
+    weight = max((task.get("effective_weight") or 0 for task in item.associated_contents), default=0)
+    status_order = {"not_started": 0, "in_progress": 1, "studied": 2, "reviewed": 3}
+    difficulty_order = {"high": 0, "medium": 1, "low": 2, None: 3}
+    state = min((status_order.get(task.get("status"), 4) for task in item.associated_contents), default=4)
+    difficulty = min((difficulty_order.get(task.get("difficulty"), 3) for task in item.associated_contents), default=3)
+    performance = item.partial_average if item.partial_average is not None else 11.0
+    return (nearest, 0 if deadlines else 1, -weight, state, difficulty, performance, -item.priority, item.code, item.id)
 
 
 def _availability_minutes(payload: StudyPlanRequest) -> tuple[int, list[str]]:
@@ -266,7 +277,7 @@ def _build_plan_without_windows(
 
 
 def _window_sort_key(window: Any) -> tuple[int, int]:
-    return (DAY_ORDER.index(window.day), _parse_minutes(window.start_time))
+    return (next_date_for_weekday(str(window.day)), _parse_minutes(window.start_time))
 
 
 def _build_plan_with_windows(
@@ -373,6 +384,12 @@ def validate_study_plan(
             raise StudyPlanOutputError("Plano contém disciplina não selecionada.")
         if session.get("day") not in allowed_days:
             raise StudyPlanOutputError("Plano contém dia não permitido.")
+        scheduled_date = session.get("scheduled_date")
+        expected_date = next_date_for_weekday(session["day"])
+        if scheduled_date is not None and scheduled_date != expected_date:
+            raise StudyPlanOutputError("Plano contém data incompatível com o dia disponível.")
+        if session.get("assessment_date") and (scheduled_date is None or scheduled_date >= session["assessment_date"]):
+            raise StudyPlanOutputError("Plano contém preparação posterior ao prazo da avaliação.")
         duration = int(session.get("duration_minutes", 0))
         if duration <= 0:
             raise StudyPlanOutputError("Plano contém sessão sem duração válida.")
@@ -406,9 +423,16 @@ def validate_study_plan(
 
 
 def _build_fallback_summary(plan: list[dict[str, Any]], warnings: list[str]) -> str:
-    if warnings:
-        return "Plano semanal gerado por regras determinísticas com avisos sobre a disponibilidade informada."
-    return "Plano semanal gerado por regras determinísticas a partir das disciplinas e disponibilidade informadas."
+    deadlines = []
+    for session in plan:
+        if session.get("assessment_name") and session.get("assessment_date"):
+            item = f'{session["assessment_name"]} em {session["assessment_date"]}'
+            if item not in deadlines:
+                deadlines.append(item)
+    base = "Plano semanal gerado por regras determinísticas"
+    if deadlines:
+        base += "; prioridades temporais consideradas: " + ", ".join(deadlines)
+    return base + (". Há avisos de capacidade ou disponibilidade." if warnings else ".")
 
 
 def _validate_llm_explanation(data: dict[str, Any], selected_ids: set[str]) -> str:
@@ -475,7 +499,7 @@ def _build_llm_context(
     return {
         "discipline_ids": [discipline.id for discipline in disciplines],
         "disciplines": [
-            {"id": discipline.id, "code": discipline.code, "priority": discipline.priority, "priority_influences": discipline.priority_influences}
+            {"id": discipline.id, "code": discipline.code, "priority": discipline.priority, "priority_influences": discipline.priority_influences, "associated_contents": [{"title": task.get("title"), "assessment_name": task.get("assessment_name"), "assessment_date": task.get("assessment_date"), "association_origin": task.get("association_origin"), "status": task.get("status"), "difficulty": task.get("difficulty")} for task in discipline.associated_contents]}
             for discipline in disciplines
         ],
         "plan": [
@@ -484,6 +508,11 @@ def _build_llm_context(
                 "discipline_id": item["discipline_id"],
                 "duration_minutes": item["duration_minutes"],
                 "sequence": item["sequence"],
+                "scheduled_date": item.get("scheduled_date"),
+                "assessment_name": item.get("assessment_name"),
+                "assessment_date": item.get("assessment_date"),
+                "content_node_id": item.get("content_node_id"),
+                "association_origin": item.get("association_origin"),
             }
             for item in plan
         ],
@@ -518,10 +547,61 @@ def generate_plan_explanation(
         if not fallback_enabled:
             raise
         return _build_fallback_summary(plan, warnings), "deterministic_fallback", ["A personalização por IA demorou demais e foi substituída pelo fallback determinístico."], "timeout", _duration_ms(llm_start)
-    except Exception as exc:
+    except ValueError:
         if not fallback_enabled:
             raise
-        return _build_fallback_summary(plan, warnings), "deterministic_fallback", ["A personalização por IA não pôde ser validada e foi substituída pelo fallback determinístico."], type(exc).__name__, _duration_ms(llm_start)
+        return _build_fallback_summary(plan, warnings), "deterministic_fallback", ["A explicação da IA não passou pela validação e foi substituída pelo fallback determinístico."], "invalid_response", _duration_ms(llm_start)
+    except Exception:
+        if not fallback_enabled:
+            raise
+        return _build_fallback_summary(plan, warnings), "deterministic_fallback", ["O provedor de IA ficou indisponível; o plano determinístico foi preservado."], "provider_unavailable", _duration_ms(llm_start)
+
+def _task_sort_key(task: dict[str, Any]) -> tuple:
+    status_order = {"not_started": 0, "in_progress": 1, "studied": 2, "reviewed": 3}
+    difficulty_order = {"high": 0, "medium": 1, "low": 2, None: 3}
+    return (
+        date.fromisoformat(str(task["assessment_date"])),
+        -(task.get("effective_weight") or 0),
+        status_order.get(task.get("status"), 4),
+        difficulty_order.get(task.get("difficulty"), 3),
+        task.get("title", ""),
+    )
+
+
+def apply_temporal_content_schedule(
+    plan: list[dict[str, Any]],
+    disciplines: list[RegisteredDiscipline],
+    reference_date: date | None = None,
+) -> list[str]:
+    today = reference_date or local_today()
+    for session in plan:
+        session["scheduled_date"] = next_date_for_weekday(session["day"], today)
+    warnings: list[str] = []
+    for discipline in sorted(disciplines, key=_discipline_sort_key):
+        sessions = sorted(
+            (session for session in plan if session["discipline_id"] == discipline.id),
+            key=lambda item: (item["scheduled_date"], item.get("start_time") or "", item["sequence"]),
+        )
+        used: set[int] = set()
+        for task in sorted(discipline.associated_contents, key=_task_sort_key):
+            deadline = date.fromisoformat(str(task["assessment_date"]))
+            candidate = next((session for session in sessions if id(session) not in used and session["scheduled_date"] < deadline), None)
+            if candidate is None:
+                warnings.append(
+                    f'Conteúdos associados ficaram pendentes por falta de capacidade antes de {task["assessment_name"]} em {deadline.isoformat()}: {task["title"]}.'
+                )
+                continue
+            used.add(id(candidate))
+            candidate.update({
+                "content_node_id": task["id"],
+                "assessment_id": task["assessment_id"],
+                "assessment_name": task["assessment_name"],
+                "assessment_date": deadline,
+                "association_origin": task.get("association_origin"),
+                "activity": planner_activity(task, candidate["duration_minutes"]),
+                "evidence": task.get("evidence"),
+            })
+    return warnings
 
 
 def generate_study_plan(
@@ -541,20 +621,8 @@ def generate_study_plan(
 
     disciplines = list_registered_disciplines(payload.discipline_ids, registered_records, priority_map)
     plan, warnings, total_minutes = build_baseline_study_plan(payload, disciplines)
+    warnings.extend(apply_temporal_content_schedule(plan, disciplines))
     validate_study_plan(plan, payload, disciplines, total_minutes)
-    discipline_by_id = {discipline.id: discipline for discipline in disciplines}
-    used_content_counts: dict[str, int] = {}
-    for session in plan:
-        discipline = discipline_by_id[session["discipline_id"]]
-        index = used_content_counts.get(discipline.id, 0)
-        if index < len(discipline.associated_contents):
-            session["activity"] = planner_activity(discipline.associated_contents[index])
-            used_content_counts[discipline.id] = index + 1
-    for discipline in disciplines:
-        used = used_content_counts.get(discipline.id, 0)
-        if len(discipline.associated_contents) > used:
-            pending = ", ".join(node["title"] for node in discipline.associated_contents[used:])
-            warnings.append(f"Conteúdos associados ficaram pendentes por falta de sessões: {pending}.")
 
     summary, source, explanation_warnings, fallback_reason, llm_latency = generate_plan_explanation(
         payload, disciplines, plan, warnings, llm_client=llm_client
@@ -577,6 +645,7 @@ def generate_study_plan(
                 "discipline_count": len(disciplines),
             },
             "request_id": request_id,
+            "fallback_reason": fallback_reason,
         }
     )
     _log_event(

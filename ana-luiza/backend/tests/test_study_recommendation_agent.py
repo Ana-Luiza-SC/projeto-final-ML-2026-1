@@ -356,3 +356,58 @@ def test_llm_promise_of_approval_triggers_safe_fallback(client, monkeypatch):
     body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"], pending_topics=[_topic()])).json()
     assert body["used_fallback"] is True
     assert all("garante aprovação" not in action.lower() for action in body["recommended_actions"])
+
+def test_execution_mode_and_missing_configuration_reason_are_structured(client):
+    discipline = create_discipline(client)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"])).json()
+    assert body["execution_mode"] == "deterministic_fallback"
+    assert body["fallback_reason"] == "missing_api_key" and body["model"] is None
+
+def test_configured_valid_llm_is_identified_as_llm(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-only")
+    monkeypatch.setattr(study_recommendation_agent, "generate_google_recommendation", lambda *_args, **_kwargs: _valid_llm_payload([]))
+    discipline = create_discipline(client)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"])).json()
+    assert body["execution_mode"] == "llm" and body["provider"] == "google"
+    assert body["used_fallback"] is False and body["model"]
+
+def test_timeout_reason_is_returned_and_logged(client, monkeypatch, caplog):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-only")
+    def timeout(*_args, **_kwargs): raise TimeoutError("late")
+    monkeypatch.setattr(study_recommendation_agent, "generate_google_recommendation", timeout)
+    caplog.set_level(logging.INFO, logger="estudaunb.agent")
+    discipline = create_discipline(client)
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"])).json()
+    assert body["execution_mode"] == "deterministic_fallback" and body["fallback_reason"] == "timeout"
+    assert '"error_type": "timeout"' in caplog.text
+
+def test_complete_hierarchical_context_reaches_configured_agent(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-only")
+    captured = {}
+    def valid(context, timeout_seconds):
+        captured.update(context)
+        return _valid_llm_payload([])
+    monkeypatch.setattr(study_recommendation_agent, "generate_google_recommendation", valid)
+    discipline = create_discipline(client)
+    root = client.post(f"/api/disciplines/{discipline['id']}/contents", json={"title": "Ordenação", "status": "in_progress"}).json()
+    child = client.post(f"/api/disciplines/{discipline['id']}/contents/{root['id']}/children", json={"title": "Quicksort", "difficulty": "high"}).json()
+    proof = client.post(f"/api/disciplines/{discipline['id']}/assessments", json={"name": "P1", "date": str(date.today() + timedelta(days=2)), "weight": 40, "status": "planned"}).json()
+    client.put(f"/api/disciplines/{discipline['id']}/assessments/{proof['id']}/content-associations", json={"selections": [{"content_node_id": root["id"], "include_descendants": True}]})
+    body = client.post("/api/agent/study-recommendation", json=recommendation_payload(discipline["id"])).json()
+    assert body["execution_mode"] == "llm"
+    assert captured["content_hierarchy"][0]["children"][0]["id"] == child["id"]
+    group = captured["assessment_content_context"][0]
+    assert group["assessment_name"] == "P1" and group["assessment_date"]
+    inherited = next(item for item in group["nodes"] if item["id"] == child["id"])
+    assert inherited["association_origin"] == "inherited" and inherited["difficulty"] == "high"
+
+def test_assistant_fallback_uses_associated_context_and_explains_configuration(client, monkeypatch):
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    discipline = create_discipline(client)
+    content = client.post(f"/api/disciplines/{discipline['id']}/contents", json={"title": "Quicksort", "difficulty": "high"}).json()
+    proof = client.post(f"/api/disciplines/{discipline['id']}/assessments", json={"name": "P1", "date": str(date.today() + timedelta(days=2)), "weight": 40, "status": "planned"}).json()
+    client.put(f"/api/disciplines/{discipline['id']}/assessments/{proof['id']}/content-associations", json={"selections": [{"content_node_id": content["id"], "include_descendants": False}]})
+    body = client.post(f"/api/disciplines/{discipline['id']}/assistant/messages", json={"message": "No que devo focar?", "recent_messages": []}).json()
+    assert body["execution_mode"] == "deterministic_fallback" and body["fallback_reason"] == "missing_api_key"
+    assert "P1" in body["answer"] and "Quicksort" in body["answer"]
+    assert any("associação direta" in evidence for evidence in body["evidence"])

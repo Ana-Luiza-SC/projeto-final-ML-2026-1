@@ -287,6 +287,9 @@ class StudyRecommendationResponse(BaseModel):
     missing_information: list[str] = Field(default_factory=list)
     used_fallback: bool
     provider: RecommendationProvider
+    execution_mode: Literal["llm", "deterministic_fallback"]
+    fallback_reason: str | None = None
+    model: str | None = None
     latency_ms: float = Field(..., ge=0)
     warnings: list[str] = Field(default_factory=list)
     used_evidence: list[str] = Field(default_factory=list)
@@ -329,6 +332,9 @@ class DisciplineAssistantRequest(BaseModel):
 class DisciplineAssistantResponse(BaseModel):
     status: Literal["success"] = "success"
     source: Literal["gemini", "fallback"]
+    execution_mode: Literal["llm", "deterministic_fallback"]
+    fallback_reason: str | None = None
+    model: str | None = None
     answer: str = Field(..., min_length=1)
     evidence: list[str] = Field(default_factory=list)
     suggested_actions: list[str] = Field(default_factory=list)
@@ -450,6 +456,13 @@ class StudyPlanSession(BaseModel):
     activity: str
     start_time: str | None = None
     end_time: str | None = None
+    scheduled_date: Date | None = None
+    content_node_id: UUID | None = None
+    assessment_id: UUID | None = None
+    assessment_name: str | None = None
+    assessment_date: Date | None = None
+    association_origin: Literal["direct", "inherited"] | None = None
+    evidence: str | None = None
 
 
 class StudyPlanMetrics(BaseModel):
@@ -479,6 +492,7 @@ class StudyPlanResponse(BaseModel):
     metrics: StudyPlanMetrics
     priority_influences: list[StudyPlanPriorityInfluence] = Field(default_factory=list)
     request_id: str
+    fallback_reason: str | None = None
 
 
 class SigaaComponent(BaseModel):

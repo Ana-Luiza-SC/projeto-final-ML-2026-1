@@ -7,6 +7,7 @@ type Props = {
 };
 
 const strategyLabels: Record<string, string> = { retrieval_practice: "Prática de recuperação", spaced_practice: "Prática distribuída", interleaving: "Intercalação", concrete_examples: "Exemplos concretos ou resolvidos", self_explanation: "Autoexplicação" };
+const fallbackLabels: Record<string, string> = { missing_api_key: "IA não configurada; resposta determinística.", unsupported_provider: "Provedor não suportado; resposta determinística.", timeout: "Tempo do modelo excedido; resposta determinística.", invalid_response: "Resposta do modelo rejeitada pela validação; resposta determinística.", provider_unavailable: "Provedor indisponível; resposta determinística." };
 const dedicationLabels = {
   low: "baixa",
   medium: "média",
@@ -28,12 +29,12 @@ export function StudyRecommendationPanel({ recommendation, loading = false, erro
       {recommendation && (
         <div className="recommendation-content">
           {recommendation.used_fallback && (
-            <p className="message warning">Fallback por regras usado. O backend funciona mesmo sem GOOGLE_API_KEY.</p>
+            <p className="message warning">{fallbackLabels[recommendation.fallback_reason ?? ""] ?? "Fallback determinístico utilizado."}</p>
           )}
           <div className="metrics-grid">
             <div><span>Dedicação recomendada</span><strong>{dedicationLabels[recommendation.dedication_level]}</strong></div>
             <div><span>Confiança</span><strong>{Math.round(recommendation.confidence * 100)}%</strong></div>
-            <div><span>Provider</span><strong>{recommendation.provider}</strong></div>
+            <div><span>Modo</span><strong>{recommendation.execution_mode === "llm" ? `LLM · ${recommendation.model ?? recommendation.provider}` : "Determinístico"}</strong></div>
             <div><span>Latência</span><strong>{recommendation.latency_ms} ms</strong></div>
           </div>
 

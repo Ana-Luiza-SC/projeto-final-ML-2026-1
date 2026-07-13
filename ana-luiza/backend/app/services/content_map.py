@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone
 from typing import Any
 from uuid import uuid4
 from app import storage
+from app.services.academic_time import local_today
 
 MAX_DEPTH = 5
 MAX_NODES = 100
@@ -107,7 +108,7 @@ def resolve_associations(discipline_id: str, assessment_id: str) -> dict:
             resolved.append({**node, "association_origin": origin, "selected_ancestor_id": ancestor_id if origin == "inherited" else None})
     return {"assessment_id": assessment_id, "selections": selections, "resolved_nodes": resolved}
 
-def relevant_assessment_contents(discipline_id: str, assessments: list[dict]) -> list[dict]:
+def relevant_assessment_contents(discipline_id: str, assessments: list[dict], reference_date: date | None = None) -> list[dict]:
     result = []
     status_order = {"not_started": 0, "in_progress": 1, "studied": 2, "reviewed": 3}
     difficulty_order = {"high": 0, "medium": 1, "low": 2, None: 3}
@@ -119,7 +120,7 @@ def relevant_assessment_contents(discipline_id: str, assessments: list[dict]) ->
             assessment_date = date.fromisoformat(str(assessment["date"]))
         except ValueError:
             continue
-        if assessment_date < date.today():
+        if assessment_date < (reference_date or local_today()):
             continue
         upcoming.append((assessment_date, assessment))
     for _, assessment in sorted(upcoming, key=lambda item: (item[0], item[1]["name"])):
@@ -136,10 +137,10 @@ def agent_content_context(discipline_id: str, assessments: list[dict]) -> dict:
             if node["id"] in associated_ids: continue
             associated_ids.add(node["id"]); prioritized.append(node)
             if node["association_origin"] == "direct":
-                evidence[node["title"]] = f'{node["title"]} foi associado diretamente à {group["assessment_name"]} e está marcado como {node["status"]}.'
+                evidence[node["title"]] = f'{node["title"]} foi associado diretamente à {group["assessment_name"]} em {group["assessment_date"]}; estado {node["status"]}; dificuldade {node.get("difficulty") or "não informada"}.'
             else:
                 ancestor = get_node(discipline_id, node["selected_ancestor_id"])
-                evidence[node["title"]] = f'{node["title"]} foi incluído por {ancestor["title"]}, associado com descendentes à {group["assessment_name"]}, e está marcado como {node["status"]}.'
+                evidence[node["title"]] = f'{node["title"]} foi incluído por {ancestor["title"]}, associado com descendentes à {group["assessment_name"]} em {group["assessment_date"]}; estado {node["status"]}; dificuldade {node.get("difficulty") or "não informada"}.'
     status_order = {"not_started": 0, "in_progress": 1, "studied": 2, "reviewed": 3}
     difficulty_order = {"high": 0, "medium": 1, "low": 2, None: 3}
     general = sorted((node for node in _nodes(discipline_id).values() if node["id"] not in associated_ids), key=lambda n: (status_order[n["status"]], difficulty_order[n.get("difficulty")], n["title"]))

@@ -68,3 +68,11 @@ O armazenamento permanece em memória. Não há calendário, agenda, drag-and-dr
 - `git diff --check`: sem erros;
 - backend e frontend no Compose: HTTP 200;
 - smoke HTTP: plano confirmado, preview sem persistência, edição da hierarquia, confirmação, associação com descendentes e recomendação em fallback com evidências diretas e herdadas.
+
+## Correção de integração e prioridade temporal
+
+A interface usa checkboxes compactos com classe própria; regras globais de inputs textuais não se aplicam a checkbox ou radio. A indentação é limitada aos cinco níveis permitidos e reduzida em telas estreitas.
+
+O agente recebe plano confirmado, avaliações com datas e pesos, árvore, associações diretas/herdadas, estado e dificuldade. Respostas expõem `execution_mode`, `fallback_reason` e modelo sem revelar chave ou erro técnico. O fallback mantém o mesmo contexto e registra internamente a categoria da causa.
+
+No planejamento, `America/Sao_Paulo` é a política temporal. Cada dia semanal é materializado na próxima data correspondente a partir da data local. Como a avaliação possui apenas data, uma sessão de preparação deve ocorrer em data estritamente anterior. Conteúdos associados a várias avaliações usam o prazo futuro mais próximo. A ordenação determinística considera: prazo, presença de associação, peso efetivo, estado, dificuldade, desempenho, prioridade informada e identificadores estáveis. Conteúdos sem capacidade anterior ao prazo permanecem pendentes com aviso; o LLM não pode alterar dia, data, minutos ou prazo.

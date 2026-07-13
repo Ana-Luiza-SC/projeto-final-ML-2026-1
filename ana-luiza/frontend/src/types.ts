@@ -153,8 +153,9 @@ export type StudyRecommendationRequest = {
   user_goal?: string | null;
 };
 
-export type AssistantMessage = { role: "user" | "assistant"; content: string; evidence?: string[]; suggested_actions?: string[]; warnings?: string[]; source?: "gemini" | "fallback" };
-export type DisciplineAssistantResponse = { status: "success"; source: "gemini" | "fallback"; answer: string; evidence: string[]; suggested_actions: string[]; warnings: string[] };
+export type AgentExecutionMode = "llm" | "deterministic_fallback";
+export type AssistantMessage = { role: "user" | "assistant"; content: string; evidence?: string[]; suggested_actions?: string[]; warnings?: string[]; source?: "gemini" | "fallback"; execution_mode?: AgentExecutionMode; fallback_reason?: string | null; model?: string | null };
+export type DisciplineAssistantResponse = { status: "success"; source: "gemini" | "fallback"; execution_mode: AgentExecutionMode; fallback_reason?: string | null; model?: string | null; answer: string; evidence: string[]; suggested_actions: string[]; warnings: string[] };
 
 export type StudyAction = { strategy_id: "retrieval_practice" | "spaced_practice" | "interleaving" | "concrete_examples" | "self_explanation"; action: string; topic?: string | null; estimated_minutes?: number | null; reason: string; evidence: string; reference_ids: string[] };
 export type StudyStrategyReference = { id: string; short_citation: string; title: string; url: string };
@@ -170,6 +171,9 @@ export type StudyRecommendationResponse = {
   missing_information: string[];
   used_fallback: boolean;
   provider: "google" | "rules";
+  execution_mode: AgentExecutionMode;
+  fallback_reason?: string | null;
+  model?: string | null;
   latency_ms: number;
   warnings?: string[];
   used_evidence?: string[];
@@ -230,6 +234,13 @@ export type StudyPlanSession = {
   activity: string;
   start_time?: string | null;
   end_time?: string | null;
+  scheduled_date?: string | null;
+  content_node_id?: string | null;
+  assessment_id?: string | null;
+  assessment_name?: string | null;
+  assessment_date?: string | null;
+  association_origin?: "direct" | "inherited" | null;
+  evidence?: string | null;
 };
 
 export type StudyPlanResponse = {
@@ -254,6 +265,7 @@ export type StudyPlanResponse = {
     bonus: number;
     reason: string;
   }[];
+  fallback_reason?: string | null;
   request_id: string;
 };
 

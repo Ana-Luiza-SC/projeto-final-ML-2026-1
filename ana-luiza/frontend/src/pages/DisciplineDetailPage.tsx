@@ -93,9 +93,9 @@ function ContentSelectionEditor({ nodes, selections, onChange }: { nodes: Conten
   function rows(items: ContentNode[], depth = 0): ReactNode[] {
     return items.flatMap((node) => {
       const selection = selected.get(node.id);
-      return [<div className="content-selection-row" key={node.id} style={{ paddingLeft: depth * 18 }}>
-        <label><input type="checkbox" checked={Boolean(selection)} onChange={(event) => update(node.id, event.target.checked, selection?.include_descendants)} /> {node.title}</label>
-        {selection && node.children.length > 0 && <label><input type="checkbox" checked={selection.include_descendants} onChange={(event) => update(node.id, true, event.target.checked)} /> incluir descendentes</label>}
+      return [<div className={`content-selection-row content-selection-depth-${Math.min(depth, 5)}`} key={node.id}>
+        <label className="content-selection-label"><input className="content-checkbox" type="checkbox" checked={Boolean(selection)} onChange={(event) => update(node.id, event.target.checked, selection?.include_descendants)} /> {node.title}</label>
+        {selection && node.children.length > 0 && <label className="content-selection-label"><input className="content-checkbox" type="checkbox" checked={selection.include_descendants} onChange={(event) => update(node.id, true, event.target.checked)} /> incluir descendentes</label>}
       </div>, ...rows(node.children, depth + 1)];
     });
   }

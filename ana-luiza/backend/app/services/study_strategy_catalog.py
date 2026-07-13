@@ -61,8 +61,19 @@ def build_study_actions(discipline: dict[str, Any], topics: list[Any]) -> list[d
         add("interleaving", f"Se estes conteúdos forem relacionados, alterne um exercício de cada um ({', '.join(names)}), corrigindo um pequeno bloco antes de trocar.", ", ".join(names), "Há vários conteúdos cadastrados; a intercalação fica condicionada à relação entre eles e blocos pequenos evitam alternância excessiva.", f"Conteúdos cadastrados: {', '.join(names)}.")
     return actions
 
-def planner_activity(node: dict[str, Any]) -> str:
+def planner_activity(node: dict[str, Any], duration_minutes: int | None = None) -> str:
     title = node["title"]
-    if node.get("status") == "not_started" or node.get("difficulty") == "high":
-        return f"Acompanhe um exemplo resolvido de {title}, refaça sem copiar e registre as lacunas."
-    return f"Tente recuperar {title} sem consulta, resolva um exercício e corrija os erros ao final."
+    assessment = node.get("assessment_name")
+    deadline = node.get("assessment_date")
+    origin = "diretamente" if node.get("association_origin") == "direct" else "por um bloco ancestral"
+    context = f" para {assessment} em {deadline}" if assessment and deadline else ""
+    attempts = max(1, (duration_minutes or 30) // 20)
+    if node.get("status") == "not_started":
+        if node.get("difficulty") == "high":
+            return f"Comece {title}{context} com um exemplo resolvido; explique cada decisão e refaça sem copiar. O conteúdo foi associado {origin}."
+        return f"Construa um exemplo concreto de {title}{context}, explique os passos e confira as lacunas ao final. O vínculo foi feito {origin}."
+    if node.get("status") == "in_progress":
+        return f"Faça {attempts} tentativa(s) de recuperação sobre {title}{context} sem consulta; corrija os erros e retome apenas as lacunas."
+    if node.get("status") == "reviewed":
+        return f"Teste a retenção de {title}{context} com {attempts} questão(ões) sem consulta e registre somente os pontos que ainda falharem."
+    return f"Explique {title}{context} sem consultar, resolva {attempts} exercício(s) e corrija cada erro com evidência do material."

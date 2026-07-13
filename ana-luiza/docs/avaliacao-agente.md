@@ -74,3 +74,9 @@ O cenário de integração EDA 2 cobre `Ordenação → Quicksort/Mergesort`, as
 A extração usa exclusivamente a lista estruturada de conteúdos do plano de ensino já confirmado. O modelo propõe título, descrição e hierarquia em JSON validado, sempre acompanhado de evidência literal, confiança e avisos. O preview tem TTL de 15 minutos e não altera a árvore persistida. Títulos, descrições, pais e remoções só são aplicados após confirmação humana; estado inicial e ausência de dificuldade são definidos deterministicamente.
 
 Sem chave, em timeout, indisponibilidade, JSON inválido ou evidência não encontrada no plano, o fluxo retorna `local_fallback`. Esse fallback cria apenas uma proposta plana com os itens explícitos do plano, sem inventar subtópicos ou relações. Os logs registram disciplina, provedor/modelo, latência, quantidade de nós e categoria do fallback, nunca prompt, resposta integral, título, descrição ou evidência.
+
+## Auditoria de modo de execução e prazos
+
+As respostas de recomendação e do chat diferenciam `llm` de `deterministic_fallback` e categorizam ausência de chave, provedor não suportado, timeout, indisponibilidade e resposta inválida. A interface traduz essas categorias sem exibir erro técnico. Testes com mocks comprovam chamada configurada, contexto hierárquico completo, timeout, validação e logs sem prompt ou chave.
+
+O planejador materializa os dias em datas de `America/Sao_Paulo` e vincula uma atividade a uma avaliação somente quando `scheduled_date < assessment_date`. A explicação recebe o plano já validado e não pode mudar a estrutura. O cenário de domingo com provas terça e quinta e disponibilidade segunda, quarta e sexta reserva segunda para a primeira prova, quarta para a segunda e não rotula sexta como preparação para nenhuma delas.
