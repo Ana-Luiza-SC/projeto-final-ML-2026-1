@@ -1,0 +1,175 @@
+{
+  "schema_version": "1.0.0",
+  "document_id": "estudaunb-study-methods-v1",
+  "language": "en",
+  "canonical_ingestion_source": "study_methods.json",
+  "human_readable_source": "evidence_based_study_methods_rag.pdf",
+  "ingestion_policy": {
+    "embed_json": true,
+    "embed_pdf": false,
+    "reason": "Avoid duplicated chunks and distorted retrieval ranking."
+  },
+  "methods": [
+    {
+      "id": "retrieval_practice",
+      "name": "Retrieval practice",
+      "category": "learning_strategy",
+      "evidence_level": "strong",
+      "purpose": "Retrieve previously studied information without consulting the answer first.",
+      "recommended_for": [
+        "factual",
+        "conceptual",
+        "procedural",
+        "exam_preparation"
+      ],
+      "protocol": [
+        "Define a narrow objective.",
+        "Hide notes or solutions.",
+        "Recall, explain, or solve from memory.",
+        "Check the answer and record errors.",
+        "Correct errors with feedback and retry later."
+      ],
+      "limitations": [
+        "Requires feedback to avoid reinforcing errors."
+      ],
+      "source_dois": [
+        "10.1177/1529100612453266",
+        "10.1111/j.1467-9280.2006.01693.x",
+        "10.1016/j.tics.2010.09.003"
+      ]
+    },
+    {
+      "id": "distributed_practice",
+      "name": "Distributed practice",
+      "category": "learning_strategy",
+      "evidence_level": "strong",
+      "purpose": "Distribute study and retrieval across multiple occasions.",
+      "recommended_for": [
+        "long_term_retention",
+        "cumulative_courses",
+        "concepts"
+      ],
+      "protocol": [
+        "Split a topic across days or weeks.",
+        "Revisit after some forgetting.",
+        "Use retrieval during each revisit.",
+        "Adjust intervals from performance."
+      ],
+      "limitations": [
+        "There is no universal interval."
+      ],
+      "source_dois": [
+        "10.1177/1529100612453266",
+        "10.1037/0033-2909.132.3.354"
+      ]
+    },
+    {
+      "id": "interleaving",
+      "name": "Interleaved practice",
+      "category": "learning_strategy",
+      "evidence_level": "moderate",
+      "purpose": "Mix related problem types so the learner must choose the correct strategy.",
+      "recommended_for": [
+        "mathematics",
+        "programming",
+        "classification"
+      ],
+      "protocol": [
+        "Select related problem types.",
+        "Alternate them in a mixed set.",
+        "Do not label the method in advance.",
+        "Explain why each method applies."
+      ],
+      "limitations": [
+        "Use only after basic competence exists."
+      ],
+      "source_dois": [
+        "10.1111/j.1467-9280.2008.02127.x"
+      ]
+    },
+    {
+      "id": "worked_examples",
+      "name": "Worked examples",
+      "category": "learning_strategy",
+      "evidence_level": "moderate_to_strong_for_novices",
+      "purpose": "Study a complete correct solution before independent practice.",
+      "recommended_for": [
+        "novices",
+        "mathematics",
+        "algorithms",
+        "programming"
+      ],
+      "protocol": [
+        "Study a complete example.",
+        "Explain each step.",
+        "Solve a similar problem with partial guidance.",
+        "Fade guidance."
+      ],
+      "limitations": [
+        "Passive copying is weak."
+      ],
+      "source_dois": [
+        "10.1111/cogs.12086"
+      ]
+    },
+    {
+      "id": "self_explanation",
+      "name": "Self-explanation",
+      "category": "learning_strategy",
+      "evidence_level": "moderate",
+      "purpose": "Explain meaning, reasons, and links to prior knowledge.",
+      "recommended_for": [
+        "conceptual_learning",
+        "proofs",
+        "code_comprehension"
+      ],
+      "protocol": [
+        "Pause after a step or paragraph.",
+        "Explain it in your own words.",
+        "State why it is valid.",
+        "Verify uncertainty."
+      ],
+      "limitations": [
+        "Unverified explanations may contain misconceptions."
+      ],
+      "source_dois": [
+        "10.1007/s10648-018-9434-x"
+      ]
+    },
+    {
+      "id": "pomodoro",
+      "name": "Pomodoro / focus-break cycles",
+      "category": "time_management_format",
+      "evidence_level": "limited_to_moderate",
+      "purpose": "Support task initiation, attention, and fatigue management.",
+      "recommended_for": [
+        "task_initiation",
+        "distraction_management",
+        "routine_building"
+      ],
+      "protocol": [
+        "Choose a concrete task.",
+        "Select a configurable focus interval.",
+        "Work and record interruptions.",
+        "Take a short break.",
+        "Use a longer break after several cycles."
+      ],
+      "limitations": [
+        "The 25/5 ratio is not universal.",
+        "Pomodoro does not replace a cognitive learning strategy."
+      ],
+      "source_dois": [
+        "10.1111/bjep.12593",
+        "10.1016/j.cognition.2010.12.007"
+      ]
+    }
+  ],
+  "adaptation_guardrails": [
+    "Do not identify a preferred method after one activity.",
+    "Require at least three comparable observations per method and task type.",
+    "Keep subjective preference separate from objective performance.",
+    "Do not infer fixed learning styles.",
+    "Expose insufficient-data states.",
+    "Allow user override."
+  ]
+}
