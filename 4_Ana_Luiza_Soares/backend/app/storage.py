@@ -220,6 +220,10 @@ def upsert_catalog_component(component):
             "synced_at": now,
         }
         if row:
+            if not values["syllabus"]:
+                values["syllabus"] = row.syllabus
+            if not values["current_program"]:
+                values["current_program"] = row.current_program
             for k, v in values.items():
                 setattr(row, k, v)
         else:
@@ -258,9 +262,11 @@ def attach_sigaa_component(discipline_id, component):
         {
             "sigaa_code": component.get("code"),
             "sigaa_source_url": component.get("source_url"),
-            "syllabus": (catalog or {}).get("syllabus", ""),
-            "current_program": (catalog or {}).get("current_program", ""),
-            "workload_hours": (catalog or {}).get("workload_hours"),
+            "syllabus": (catalog or {}).get("syllabus") or record.get("syllabus", ""),
+            "current_program": (catalog or {}).get("current_program")
+            or record.get("current_program", ""),
+            "workload_hours": (catalog or {}).get("workload_hours")
+            or record.get("workload_hours"),
             "sigaa_cached_at": now,
             "updated_at": now,
         }

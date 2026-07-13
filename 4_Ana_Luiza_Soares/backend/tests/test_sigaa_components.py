@@ -226,6 +226,10 @@ def test_search_sigaa_component_uses_same_session_and_posts_payload():
     assert payload["form:j_id_jsp_190531263_11"] == "FGA0315"
     assert payload["form:j_id_jsp_190531263_13"] == ""
     assert payload["form:btnBuscarComponentes"] == "Buscar Componentes"
+    turma_search_payload = fake_session.post_calls[1]["data"]
+    assert (
+        turma_search_payload["formTurma:j_id_jsp_987654321_44"] == "Buscar"
+    )
     detail_payload = fake_session.post_calls[2]["data"]
     assert detail_payload["formTurma"] == "formTurma"
     assert detail_payload["formTurma:inputDepto"] == "673"
@@ -306,8 +310,9 @@ def test_attach_sigaa_component_to_discipline(client):
     assert body["name"] == "Qualidade de Software 1"
     assert body["sigaa_code"] == "FGA0315"
     assert body["workload_hours"] == 60
-    assert body["syllabus"] == ""
-    assert body["current_program"] == ""
+    catalog = storage.get_catalog_component("FGA0315")
+    assert body["syllabus"] == catalog["syllabus"]
+    assert (body["current_program"] or "") == catalog["current_program"]
 
 
 def test_openapi_includes_sigaa_endpoint(client):
@@ -322,13 +327,41 @@ def test_openapi_includes_sigaa_endpoint(client):
 @pytest.mark.integration
 @pytest.mark.skipif(os.getenv("RUN_SIGAA_INTEGRATION") != "1", reason="SIGAA real integration disabled by default")
 def test_real_sigaa_search_smoke():
-    response = sigaa_components.search_sigaa_component("FGA0124")
+    response = sigaa_components.search_sigaa_component(
+        "FGA0003", force_refresh=True
+    )
     assert response.status == "found"
-    assert response.component.syllabus == "Qualidade de produto, processo e medição de software."
-    assert response.component.details_processed is True
     assert response.component is not None
-    assert response.component.code == "FGA0124"
+    assert response.component.syllabus
+    assert response.component.details_processed is True
+    assert response.component.code == "FGA0003"
     assert response.component.name
+
+
+def test_catalog_refresh_bypasses_search_cache(client, monkeypatch):
+    from app.routers import catalog
+
+    discipline = create_discipline(client)
+    enriched = sigaa_components.parse_component_results(
+        fixture("sigaa_component_found.html"),
+        "FGA0315",
+        fixture("sigaa_turma_detail.html"),
+        details_processed=True,
+    )
+    calls = []
+
+    def fake_search(query, force_refresh=False):
+        calls.append((query, force_refresh))
+        return enriched
+
+    monkeypatch.setattr(catalog, "search_sigaa_component", fake_search)
+    response = client.post(
+        f"/api/disciplines/{discipline['id']}/catalog-refresh"
+    )
+
+    assert response.status_code == 200
+    assert calls == [("FGA0315", True)]
+    assert response.json()["syllabus"]
 
 def test_detail_redirect_to_login_is_rejected():
     session = FakeSession(FakeResponse("login", url="https://sigaa.unb.br/sigaa/logar.do"), FakeResponse(""))
@@ -339,6 +372,28 @@ def test_incomplete_legacy_cache_is_invalidated():
     legacy = sigaa_components.parse_component_results(fixture("sigaa_component_found.html"), "FGA0315")
     sigaa_components._write_cache({"FGA0315": legacy.model_dump(mode="json")})
     assert sigaa_components.get_cached_component("FGA0315") is None
+
+
+def test_current_failed_detail_cache_is_retried_instead_of_reused():
+    basic = sigaa_components.parse_component_results(
+        fixture("sigaa_component_found.html"), "FGA0315"
+    )
+    sigaa_components.set_cached_component("FGA0315", basic)
+
+    assert sigaa_components.get_cached_component("FGA0315") is None
+
+
+def test_dynamic_turma_search_submit_is_discovered_by_semantics():
+    name, value = sigaa_components._extract_turma_search_submit(
+        fixture("sigaa_turma_search_form.html")
+    )
+
+    assert name == "formTurma:j_id_jsp_987654321_44"
+    assert value == "Buscar"
+    assert all(
+        "j_id_jsp" not in key
+        for key in sigaa_components.build_turma_search_payload("view-state")
+    )
 
 def test_detail_without_syllabus_does_not_invent_value():
     details = sigaa_components.parse_sigaa_component_details("<div><b>Programa atual:</b> Unidade 1</div>", "https://sigaa.unb.br/sigaa/public/x")
@@ -393,6 +448,34 @@ def test_turma_detail_missing_syllabus_does_not_invent_value():
     assert response.component.syllabus == ""
     assert response.component.details_processed is True
     assert response.component.workload_hours == 60
+
+
+def test_empty_refresh_does_not_erase_persisted_syllabus(client):
+    discipline = create_discipline(client)
+    enriched = sigaa_components.parse_component_results(
+        fixture("sigaa_component_found.html"),
+        "FGA0315",
+        fixture("sigaa_turma_detail.html"),
+        details_processed=True,
+    )
+    attached = client.patch(
+        f"/api/disciplines/{discipline['id']}/sigaa-component",
+        json={"component": enriched.component.model_dump()},
+    )
+    assert attached.status_code == 200
+    expected = attached.json()["syllabus"]
+    assert expected
+
+    basic = sigaa_components.parse_component_results(
+        fixture("sigaa_component_found.html"), "FGA0315"
+    )
+    refreshed = client.patch(
+        f"/api/disciplines/{discipline['id']}/sigaa-component",
+        json={"component": basic.component.model_dump()},
+    )
+
+    assert refreshed.status_code == 200
+    assert refreshed.json()["syllabus"] == expected
 
 
 def test_turma_detail_missing_workload_preserves_primary_workload():

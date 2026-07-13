@@ -21,7 +21,8 @@ def refresh_component(discipline_id: UUID):
     if not discipline:
         raise HTTPException(404, "Disciplina não encontrada.")
     response = search_sigaa_component(
-        discipline.get("sigaa_code") or discipline["code"]
+        discipline.get("sigaa_code") or discipline["code"],
+        force_refresh=True,
     )
     if response.status != "found" or response.component is None:
         raise HTTPException(

@@ -32,7 +32,7 @@ SOURCE = "sigaa_public_components"
 USER_AGENT = "EstudaUnB/0.1 public-components-lookup"
 TIMEOUT_SECONDS = 6
 MAX_RESPONSE_BYTES = 1_000_000
-CACHE_PARSER_VERSION = "sigaa-components-v3-turma-detail"
+CACHE_PARSER_VERSION = "sigaa-components-v4-turma-search-submit"
 SIGAA_TURMA_SEARCH_FIELDS = {
     "formTurma": "formTurma",
     "formTurma:inputNivel": "",
@@ -155,6 +155,8 @@ def get_cached_component(query: str) -> SigaaComponentSearchResponse | None:
         metadata = cached.get("metadata") or {}
         payload = cached.get("response") or {}
         if metadata.get("parser_version") != CACHE_PARSER_VERSION:
+            return None
+        if metadata.get("detail_status") == "detail_unavailable":
             return None
 
     response = SigaaComponentSearchResponse.model_validate(payload)
@@ -547,9 +549,35 @@ def _extract_viewstate_value(html: str) -> str:
     raise ValueError("ViewState ausente no formulário do SIGAA.")
 
 
-def build_turma_search_payload(view_state: str) -> dict[str, str]:
+def _extract_turma_search_submit(html: str) -> tuple[str, str]:
+    soup = BeautifulSoup(html, "html.parser")
+    candidates = soup.select(
+        "form input[type='submit'], form button[type='submit'], form button:not([type])"
+    )
+    for control in candidates:
+        name = control.get("name") or control.get("id")
+        value = control.get("value") or _text(control)
+        semantic = _normalize_text(
+            " ".join(
+                [
+                    value,
+                    control.get("title", ""),
+                    control.get("aria-label", ""),
+                ]
+            )
+        )
+        if name and semantic in {"buscar", "pesquisar", "consultar"}:
+            return name, value or "Buscar"
+    raise ValueError("Botao de busca de turmas ausente no formulario publico do SIGAA.")
+
+
+def build_turma_search_payload(
+    view_state: str, search_control: tuple[str, str] | None = None
+) -> dict[str, str]:
     payload = dict(SIGAA_TURMA_SEARCH_FIELDS)
     payload["javax.faces.ViewState"] = view_state
+    if search_control:
+        payload[search_control[0]] = search_control[1]
     return payload
 
 
@@ -645,7 +673,8 @@ def extract_turma_detail_id(html: str, query: str) -> str | None:
 def fetch_turma_component_details(session: requests.Session, query: str) -> tuple[str, str]:
     form_html = fetch_turma_search_form(session)
     initial_view_state = _extract_viewstate_value(form_html)
-    search_payload = build_turma_search_payload(initial_view_state)
+    search_control = _extract_turma_search_submit(form_html)
+    search_payload = build_turma_search_payload(initial_view_state, search_control)
     result_html = submit_turma_search(session, search_payload)
     turma_id = extract_turma_detail_id(result_html, query)
     if not turma_id:
@@ -945,7 +974,12 @@ def _search_once(session: requests.Session, normalized_query: str) -> SigaaCompo
             return enriched
         basic.warnings.append("Dados básicos encontrados; o detalhe público não trouxe ementa ou carga horária. Revise ou preencha manualmente.")
         return basic
-    except (requests.RequestException, SigaaSessionRedirectError, SigaaResponseTooLargeError, ValueError):
+    except (requests.RequestException, SigaaSessionRedirectError, SigaaResponseTooLargeError, ValueError) as exc:
+        logger.warning(
+            "SIGAA detalhe publico indisponivel query=%s category=%s",
+            normalized_query,
+            type(exc).__name__,
+        )
         basic.warnings.append("Dados básicos encontrados; o detalhe público não pôde ser carregado. Revise ou preencha manualmente.")
         return basic
 
@@ -953,12 +987,13 @@ def _search_once(session: requests.Session, normalized_query: str) -> SigaaCompo
 def search_sigaa_component(
     query: str,
     session: requests.Session | None = None,
+    force_refresh: bool = False,
 ) -> SigaaComponentSearchResponse:
     normalized_query = normalize_query(query)
     if not normalized_query:
         return _empty_response("not_found", normalized_query, "Informe um código ou nome de componente.")
 
-    cached = get_cached_component(normalized_query)
+    cached = None if force_refresh else get_cached_component(normalized_query)
     if cached:
         return cached
 
