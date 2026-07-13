@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { createStudyPlan, listDisciplines } from "../api/client";
-import type { Discipline, StudyPlanDay, StudyPlanResponse, StudyPlanTimeWindow } from "../types";
-import { EmptyState, PageHeader, StatusBadge } from "../components/ui";
+import {
+  confirmWeeklyPlan,
+  createWeeklyPlanPreview,
+  listDisciplines,
+} from "../api/client";
+import { EmptyState, PageHeader } from "../components/ui";
+import type {
+  Discipline,
+  PriorityCapacityAnalysis,
+  StudyPlanDay,
+  WeeklyAvailabilityWindow,
+  WeeklyPlanPreview,
+} from "../types";
 
-const planFallbackLabels: Record<string, string> = { missing_api_key: "IA não configurada; o plano e o resumo usam regras determinísticas.", unsupported_provider: "Provedor não suportado; foram usadas regras determinísticas.", timeout: "O modelo excedeu o tempo; o plano determinístico foi preservado.", invalid_response: "A explicação do modelo foi rejeitada; o plano determinístico foi preservado.", provider_unavailable: "O provedor está indisponível; o plano determinístico foi preservado." };
 const DAYS: { value: StudyPlanDay; label: string }[] = [
   { value: "monday", label: "Segunda" },
   { value: "tuesday", label: "Terça" },
@@ -14,260 +23,492 @@ const DAYS: { value: StudyPlanDay; label: string }[] = [
   { value: "sunday", label: "Domingo" },
 ];
 
-function dayLabel(day: StudyPlanDay) {
-  return DAYS.find((item) => item.value === day)?.label ?? day;
+function pad(value: number) {
+  return String(value).padStart(2, "0");
 }
 
-export function StudyPlanPage() {
+function isoDate(date: Date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function currentWeekStart() {
+  const date = new Date();
+  const offset = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - offset);
+  return isoDate(date);
+}
+
+function minutesBetween(start: string, end: string) {
+  const [startHour, startMinute] = start.split(":").map(Number);
+  const [endHour, endMinute] = end.split(":").map(Number);
+  return Math.max(0, endHour * 60 + endMinute - startHour * 60 - startMinute);
+}
+
+function durationText(minutes: number) {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return [hours ? `${hours}h` : "", rest ? `${rest}min` : ""]
+    .filter(Boolean)
+    .join(" ") || "0min";
+}
+
+function localDateTime(value: string) {
+  return new Date(value).toLocaleString("pt-BR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function capacityTone(item: PriorityCapacityAnalysis) {
+  return item.reason_code === "fully_allocated"
+    ? "capacity-ok"
+    : item.allocated_minutes > 0
+      ? "capacity-partial"
+      : "capacity-missing";
+}
+
+export function StudyPlanPage({
+  onOpenCalendar,
+}: {
+  onOpenCalendar: () => void;
+}) {
+  const [weekStart, setWeekStart] = useState(currentWeekStart);
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [priorities, setPriorities] = useState<Record<string, number>>({});
-  const [availableHours, setAvailableHours] = useState("6");
-  const [selectedDays, setSelectedDays] = useState<StudyPlanDay[]>(["monday", "wednesday", "friday"]);
-  const [maxSession, setMaxSession] = useState("90");
+  const [windows, setWindows] = useState<WeeklyAvailabilityWindow[]>([
+    { weekday: "monday", start_time: "18:00", end_time: "20:00", available: true },
+    { weekday: "wednesday", start_time: "18:00", end_time: "20:00", available: true },
+  ]);
+  const [excludedIds, setExcludedIds] = useState<string[]>([]);
   const [objective, setObjective] = useState("");
-  const [windows, setWindows] = useState<StudyPlanTimeWindow[]>([]);
-  const [windowDraft, setWindowDraft] = useState<StudyPlanTimeWindow>({ day: "monday", start_time: "18:00", end_time: "20:00" });
-  const [loadingDisciplines, setLoadingDisciplines] = useState(true);
-  const [loadingPlan, setLoadingPlan] = useState(false);
+  const [preview, setPreview] = useState<WeeklyPlanPreview | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [plan, setPlan] = useState<StudyPlanResponse | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
-    async function load() {
-      setLoadingDisciplines(true);
-      setError(null);
-      try {
-        const response = await listDisciplines();
-        setDisciplines(response);
-        setPriorities(Object.fromEntries(response.map((discipline) => [discipline.id, 3])));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Não foi possível carregar disciplinas.");
-      } finally {
-        setLoadingDisciplines(false);
-      }
-    }
-    void load();
+    listDisciplines()
+      .then(setDisciplines)
+      .catch((reason) =>
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Não foi possível carregar as disciplinas.",
+        ),
+      );
   }, []);
 
-  const groupedPlan = useMemo(() => {
-    if (!plan) return [];
-    return DAYS.map((day) => ({
-      day,
-      sessions: plan.plan.filter((session) => session.day === day.value),
-    })).filter((item) => item.sessions.length > 0);
-  }, [plan]);
+  const dailyTotals = useMemo(() => {
+    const totals = Object.fromEntries(DAYS.map((day) => [day.value, 0])) as Record<
+      StudyPlanDay,
+      number
+    >;
+    for (const window of windows) {
+      if (window.available !== false) {
+        totals[window.weekday] += minutesBetween(window.start_time, window.end_time);
+      }
+    }
+    return totals;
+  }, [windows]);
 
-  function toggleDiscipline(id: string) {
-    setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  const weeklyTotal = useMemo(
+    () => Object.values(dailyTotals).reduce((total, minutes) => total + minutes, 0),
+    [dailyTotals],
+  );
+
+  function updateWindow(
+    index: number,
+    patch: Partial<WeeklyAvailabilityWindow>,
+  ) {
+    setWindows((current) =>
+      current.map((window, itemIndex) =>
+        itemIndex === index ? { ...window, ...patch } : window,
+      ),
+    );
+    setPreview(null);
+    setConfirmed(false);
   }
 
-  function toggleDay(day: StudyPlanDay) {
-    setSelectedDays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day]);
+  function addWindow(day: StudyPlanDay = "friday") {
+    setWindows((current) => [
+      ...current,
+      { weekday: day, start_time: "18:00", end_time: "20:00", available: true },
+    ]);
+    setPreview(null);
+    setConfirmed(false);
   }
 
-  function addWindow() {
-    if (!selectedDays.includes(windowDraft.day)) {
-      setError("A janela precisa pertencer a um dia selecionado.");
+  async function generatePreview() {
+    if (weeklyTotal < 30) {
+      setError("Adicione ao menos uma janela útil de 30 minutos.");
       return;
     }
-    setWindows((current) => [...current, windowDraft]);
+    setLoading(true);
     setError(null);
-  }
-
-  async function handleSubmit() {
-    const parsedHours = Number(availableHours);
-    const parsedSession = Number(maxSession);
-    if (!selectedIds.length) {
-      setError("Selecione ao menos uma disciplina.");
-      return;
-    }
-    if (!selectedDays.length) {
-      setError("Selecione ao menos um dia disponível.");
-      return;
-    }
-    if (!Number.isFinite(parsedHours) || parsedHours <= 0) {
-      setError("Horas semanais devem ser maiores que zero.");
-      return;
-    }
-    if (!Number.isFinite(parsedSession) || parsedSession < 30) {
-      setError("Duração máxima deve ser de pelo menos 30 minutos.");
-      return;
-    }
-
-    setLoadingPlan(true);
-    setError(null);
+    setNotice(null);
+    setConfirmed(false);
     try {
-      const response = await createStudyPlan({
-        discipline_ids: selectedIds,
-        availability: {
-          available_hours_per_week: parsedHours,
-          days_available: selectedDays,
-          time_windows: windows.length ? windows : undefined,
-        },
-        max_session_minutes: parsedSession,
-        priorities: selectedIds.map((disciplineId) => ({
-          discipline_id: disciplineId,
-          priority: priorities[disciplineId] ?? 3,
-        })),
+      const result = await createWeeklyPlanPreview({
+        week_start: weekStart,
+        windows,
+        excluded_discipline_ids: excludedIds,
         objective_text: objective.trim() || null,
       });
-      setPlan(response);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível gerar o plano.");
+      setPreview(result);
+      setNotice(
+        `${result.planned_blocks.length} bloco(s) proposto(s) para revisão antes da confirmação.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Não foi possível gerar o planejamento.",
+      );
     } finally {
-      setLoadingPlan(false);
+      setLoading(false);
     }
+  }
+
+  async function confirmPreview() {
+    if (!preview) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await confirmWeeklyPlan(preview.study_plan_id);
+      setConfirmed(true);
+      setNotice(
+        `${result.created_count} bloco(s) confirmado(s). ${result.skipped_blocks.length} bloco(s) precisaram ser ignorados por conflito.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Não foi possível confirmar os blocos.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function togglePriority(disciplineId: string) {
+    setExcludedIds((current) =>
+      current.includes(disciplineId)
+        ? current.filter((id) => id !== disciplineId)
+        : [...current, disciplineId],
+    );
+    setPreview(null);
+    setConfirmed(false);
   }
 
   return (
     <div className="page study-plan-page">
-      <PageHeader eyebrow="Planejamento semanal" title="Plano de estudos" description="Escolha suas disciplinas e organize a disponibilidade em sessões possíveis de cumprir." />
+      <PageHeader
+        eyebrow="Planejamento semanal"
+        title="Planeje sua semana"
+        description="Informe quando você pode estudar. As prioridades e os blocos são calculados com evidências acadêmicas e revisados antes de entrar no calendário."
+      />
 
       {error && <p className="message error">{error}</p>}
+      {notice && <p className="message success">{notice}</p>}
 
-      <div className="study-plan-grid">
-        <section className="panel study-plan-form">
-          <div className="panel-heading">
-            <h2>Disciplinas e disponibilidade</h2>
-            <p>O plano usa apenas disciplinas já cadastradas.</p>
+      <section className="panel planning-availability" aria-labelledby="availability-title">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Etapa 1</p>
+            <h2 id="availability-title">Disponibilidade semanal</h2>
           </div>
-
-          {loadingDisciplines && <p className="message muted">Carregando disciplinas...</p>}
-          {!loadingDisciplines && disciplines.length === 0 && <p className="message warning">Cadastre disciplinas antes de gerar um plano.</p>}
-
-          <div className="discipline-selector">
-            {disciplines.map((discipline) => (
-              <div className="study-plan-discipline" key={discipline.id}>
-                <label className="checkbox-row">
-                  <input type="checkbox" checked={selectedIds.includes(discipline.id)} onChange={() => toggleDiscipline(discipline.id)} />
-                  <span>{discipline.code} · {discipline.name}</span>
-                </label>
-                <label>
-                  Prioridade
-                  <select value={priorities[discipline.id] ?? 3} onChange={(event) => setPriorities((current) => ({ ...current, [discipline.id]: Number(event.target.value) }))} disabled={!selectedIds.includes(discipline.id)}>
-                    <option value={1}>1</option>
-                    <option value={2}>2</option>
-                    <option value={3}>3</option>
-                    <option value={4}>4</option>
-                    <option value={5}>5</option>
-                  </select>
-                </label>
-              </div>
-            ))}
-          </div>
-
-          <div className="form-grid compact-grid">
-            <label>
-              Horas semanais
-              <input type="number" min="0.5" step="0.5" value={availableHours} onChange={(event) => setAvailableHours(event.target.value)} />
-            </label>
-            <label>
-              Duração máxima por sessão
-              <select value={maxSession} onChange={(event) => setMaxSession(event.target.value)}>
-                <option value="30">30 min</option>
-                <option value="60">60 min</option>
-                <option value="90">90 min</option>
-                <option value="120">120 min</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="day-selector">
-            {DAYS.map((day) => (
-              <label className="checkbox-row" key={day.value}>
-                <input type="checkbox" checked={selectedDays.includes(day.value)} onChange={() => toggleDay(day.value)} />
-                <span>{day.label}</span>
-              </label>
-            ))}
-          </div>
-
-          <div className="window-editor">
-            <h3>Janelas horárias opcionais</h3>
-            <div className="window-row">
-              <label>
-                Dia
-                <select value={windowDraft.day} onChange={(event) => setWindowDraft((current) => ({ ...current, day: event.target.value as StudyPlanDay }))}>
-                  {DAYS.map((day) => <option key={day.value} value={day.value}>{day.label}</option>)}
-                </select>
-              </label>
-              <label>
-                Início
-                <input type="time" value={windowDraft.start_time} onChange={(event) => setWindowDraft((current) => ({ ...current, start_time: event.target.value }))} />
-              </label>
-              <label>
-                Fim
-                <input type="time" value={windowDraft.end_time} onChange={(event) => setWindowDraft((current) => ({ ...current, end_time: event.target.value }))} />
-              </label>
-              <button type="button" className="secondary-button" onClick={addWindow}>Adicionar</button>
-            </div>
-            {windows.length > 0 && (
-              <ul className="window-list">
-                {windows.map((window, index) => (
-                  <li key={`${window.day}-${window.start_time}-${window.end_time}-${index}`}>
-                    {dayLabel(window.day)} · {window.start_time} às {window.end_time}
-                    <button type="button" onClick={() => setWindows((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remover</button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <label>
-            Objetivo opcional
-            <input value={objective} maxLength={500} onChange={(event) => setObjective(event.target.value)} placeholder="ex.: revisar para a prova da próxima semana" />
+          <label className="week-field">
+            Semana iniciada em
+            <input
+              type="date"
+              value={weekStart}
+              onChange={(event) => {
+                setWeekStart(event.target.value);
+                setPreview(null);
+                setConfirmed(false);
+              }}
+            />
           </label>
+        </div>
 
-          <div className="form-actions">
-            <button type="button" onClick={handleSubmit} disabled={loadingPlan || loadingDisciplines || disciplines.length === 0}>
-              {loadingPlan ? "Gerando..." : "Gerar plano"}
-            </button>
-          </div>
-        </section>
-
-        <section className="panel study-plan-result">
-          <div className="panel-heading">
-            <h2>Plano gerado</h2>
-            <p>{plan ? (plan.source === "llm_assisted" ? "Plano personalizado com assistência de IA." : "Plano criado com as regras acadêmicas disponíveis.") : "Nenhum plano gerado ainda."}</p>
-          </div>
-
-          {!plan && !loadingPlan && <EmptyState title="Seu plano aparecerá aqui" description="Selecione as disciplinas, informe sua disponibilidade e gere uma proposta para esta semana." />}
-          {loadingPlan && <p className="message muted">Gerando plano semanal...</p>}
-          {plan && (
-            <div className="study-plan-output">
-              <p>{plan.summary}</p>
-              {plan.source === "deterministic_fallback" && <p className="message muted">{planFallbackLabels[plan.fallback_reason ?? ""] ?? "Explicação produzida pelo fallback determinístico."}</p>}
-              <div className="metrics-grid">
-                <div><span>Minutos alocados</span><strong>{plan.metrics.allocated_minutes}</strong></div>
-                <div><span>Sessões</span><strong>{plan.metrics.session_count}</strong></div>
-                <div><span>Método</span><strong>{plan.source === "llm_assisted" ? "Assistido por LLM" : "Regras determinísticas"}</strong></div>
-              </div>
-              {plan.warnings.length > 0 && (
-                <div className="warnings">
-                  <h3>Avisos</h3>
-                  <ul>{plan.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+        <div className="availability-days">
+          {DAYS.map((day) => {
+            const dayWindows = windows
+              .map((window, index) => ({ window, index }))
+              .filter((item) => item.window.weekday === day.value);
+            return (
+              <section className="availability-day" key={day.value}>
+                <div className="availability-day-heading">
+                  <strong>{day.label}</strong>
+                  <span>{durationText(dailyTotals[day.value])}</span>
                 </div>
-              )}
-              <div className="study-plan-days">
-                {groupedPlan.map(({ day, sessions }) => (
-                  <section className="study-day" key={day.value}>
-                    <h3>{day.label}</h3>
-                    {sessions.map((session) => (
-                      <div className="study-session" key={`${session.day}-${session.sequence}-${session.discipline_id}-${session.duration_minutes}`}>
-                        <strong>{session.discipline_code} · {session.discipline_name}</strong>
-                        <span>{session.start_time && session.end_time ? `${session.start_time} às ${session.end_time}` : `Sessão ${session.sequence}`} · {session.duration_minutes} min</span>
-                        {session.scheduled_date && <span>Data: {session.scheduled_date}{session.assessment_name ? ` · prepara ${session.assessment_name} (${session.assessment_date})` : ""}</span>}
-                        {session.evidence && <small>{session.evidence}</small>}
-                        <p>{session.activity}</p>
-                      </div>
-                    ))}
-                  </section>
+                {dayWindows.map(({ window, index }) => (
+                  <div className="availability-window" key={index}>
+                    <input
+                      aria-label={`Início em ${day.label}`}
+                      type="time"
+                      value={window.start_time}
+                      onChange={(event) =>
+                        updateWindow(index, { start_time: event.target.value })
+                      }
+                    />
+                    <span>até</span>
+                    <input
+                      aria-label={`Fim em ${day.label}`}
+                      type="time"
+                      value={window.end_time}
+                      onChange={(event) =>
+                        updateWindow(index, { end_time: event.target.value })
+                      }
+                    />
+                    <label className="availability-toggle">
+                      <input
+                        type="checkbox"
+                        checked={window.available !== false}
+                        onChange={(event) =>
+                          updateWindow(index, { available: event.target.checked })
+                        }
+                      />
+                      Disponível
+                    </label>
+                    <button
+                      type="button"
+                      className="text-button"
+                      aria-label={`Remover janela de ${day.label}`}
+                      onClick={() =>
+                        setWindows((current) =>
+                          current.filter((_, itemIndex) => itemIndex !== index),
+                        )
+                      }
+                    >
+                      Remover
+                    </button>
+                  </div>
                 ))}
-              </div>
+                <button
+                  type="button"
+                  className="secondary-button add-window-button"
+                  onClick={() => addWindow(day.value)}
+                >
+                  Adicionar janela
+                </button>
+              </section>
+            );
+          })}
+        </div>
+
+        <div className="availability-total" aria-live="polite">
+          <span>Total derivado da semana</span>
+          <strong>{durationText(weeklyTotal)}</strong>
+        </div>
+        <label>
+          Objetivo opcional da semana
+          <textarea
+            value={objective}
+            maxLength={500}
+            onChange={(event) => setObjective(event.target.value)}
+            placeholder="Ex.: revisar as unidades ligadas à próxima avaliação"
+          />
+        </label>
+        <div className="form-actions">
+          <button
+            type="button"
+            disabled={loading || disciplines.length === 0}
+            onClick={() => void generatePreview()}
+          >
+            {loading ? "Calculando..." : preview ? "Atualizar preview" : "Gerar preview"}
+          </button>
+        </div>
+      </section>
+
+      {disciplines.length === 0 && (
+        <EmptyState
+          title="Nenhuma disciplina cadastrada"
+          description="Cadastre ou importe disciplinas antes de montar o planejamento."
+        />
+      )}
+
+      {preview && (
+        <>
+          <section className="panel" aria-labelledby="priority-title">
+            <div className="panel-heading">
+              <p className="eyebrow">Etapa 2</p>
+              <h2 id="priority-title">Prioridades calculadas</h2>
+              <p>Você pode incluir ou excluir itens, mas a pontuação permanece autoritativa.</p>
             </div>
-          )}
-        </section>
-      </div>
+            <div className="priority-list">
+              {preview.ranked_priorities.map((priority) => (
+                <article className="priority-item" key={priority.priority_item_id}>
+                  <label className="priority-include">
+                    <input
+                      type="checkbox"
+                      checked={!excludedIds.includes(priority.discipline_id)}
+                      onChange={() => togglePriority(priority.discipline_id)}
+                    />
+                    Incluir
+                  </label>
+                  <div>
+                    <div className="priority-title-row">
+                      <strong>
+                        {priority.discipline_code} · {priority.discipline_name}
+                      </strong>
+                      <span className={`priority-band ${priority.priority_band}`}>
+                        {priority.priority_band === "high"
+                          ? "Alta"
+                          : priority.priority_band === "medium"
+                            ? "Média"
+                            : "Baixa"}{" "}
+                        {priority.priority_score}
+                      </span>
+                    </div>
+                    <p>{priority.reason}</p>
+                    <div className="priority-facts">
+                      <span>
+                        Demanda estimada:{" "}
+                        {priority.estimated_demand_minutes != null
+                          ? durationText(priority.estimated_demand_minutes)
+                          : "evidência insuficiente"}
+                      </span>
+                      {priority.assessment_name && (
+                        <span>
+                          {priority.assessment_name}
+                          {priority.deadline_at
+                            ? ` · ${new Date(priority.deadline_at).toLocaleDateString("pt-BR")}`
+                            : ""}
+                        </span>
+                      )}
+                    </div>
+                    <details>
+                      <summary>Por quê?</summary>
+                      <p>{priority.demand_reason}</p>
+                      {priority.evidence_used.length > 0 && (
+                        <ul>
+                          {priority.evidence_used.map((evidence) => (
+                            <li key={`${evidence.source_type}-${evidence.source_id}-${evidence.summary}`}>
+                              {evidence.summary}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {priority.missing_evidence.length > 0 && (
+                        <p className="message warning">
+                          Faltam dados: {priority.missing_evidence.join(" ")}
+                        </p>
+                      )}
+                    </details>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel" aria-labelledby="preview-title">
+            <div className="panel-heading">
+              <p className="eyebrow">Etapa 3</p>
+              <h2 id="preview-title">Preview de blocos</h2>
+              <p>Os blocos reservam tempo e não definem o método de estudo.</p>
+            </div>
+            {preview.planned_blocks.length ? (
+              <div className="planned-block-list">
+                {[...preview.planned_blocks]
+                  .sort((a, b) => a.start_at.localeCompare(b.start_at))
+                  .map((block) => (
+                    <article className="planned-block" key={block.temporary_id}>
+                      <time>{localDateTime(block.start_at)}</time>
+                      <div>
+                        <strong>{block.title}</strong>
+                        <p>
+                          {block.start_at.slice(11, 16)}–{block.end_at.slice(11, 16)}
+                        </p>
+                        <small>{block.reason}</small>
+                      </div>
+                    </article>
+                  ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="Nenhum bloco pôde ser proposto"
+                description="Revise as explicações de capacidade abaixo."
+              />
+            )}
+
+            <div className="capacity-list">
+              {preview.capacity_analysis.map((item) => (
+                <article
+                  className={`capacity-item ${capacityTone(item)}`}
+                  key={item.priority_item_id}
+                >
+                  <strong>{item.discipline_name}</strong>
+                  <p>{item.reason}</p>
+                  <dl>
+                    <div>
+                      <dt>Solicitado</dt>
+                      <dd>
+                        {item.requested_minutes == null
+                          ? "Desconhecido"
+                          : durationText(item.requested_minutes)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Alocado</dt>
+                      <dd>{durationText(item.allocated_minutes)}</dd>
+                    </div>
+                    <div>
+                      <dt>Utilizável antes do prazo</dt>
+                      <dd>{durationText(item.usable_minutes_before_deadline)}</dd>
+                    </div>
+                    <div>
+                      <dt>Bloqueado por eventos</dt>
+                      <dd>{durationText(item.blocked_minutes)}</dd>
+                    </div>
+                    <div>
+                      <dt>Mínimo útil</dt>
+                      <dd>{durationText(item.minimum_useful_block_minutes)}</dd>
+                    </div>
+                  </dl>
+                  {item.blocking_events.length > 0 && (
+                    <details>
+                      <summary>Eventos que bloquearam tempo</summary>
+                      <ul>
+                        {item.blocking_events.map((event) => (
+                          <li key={event.event_id}>
+                            {event.title}: {durationText(event.blocked_minutes)}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </article>
+              ))}
+            </div>
+
+            <div className="form-actions plan-confirm-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setPreview(null)}
+              >
+                Descartar preview
+              </button>
+              <button
+                type="button"
+                disabled={loading || confirmed || preview.planned_blocks.length === 0}
+                onClick={() => void confirmPreview()}
+              >
+                {confirmed ? "Blocos confirmados" : "Confirmar blocos"}
+              </button>
+              {confirmed && (
+                <button type="button" className="secondary-button" onClick={onOpenCalendar}>
+                  Ver no calendário
+                </button>
+              )}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

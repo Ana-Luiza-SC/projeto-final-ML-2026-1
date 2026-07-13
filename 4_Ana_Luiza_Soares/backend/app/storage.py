@@ -747,12 +747,16 @@ def delete_event_extraction_preview(preview_id):
 
 
 def save_study_plan_preview(preview: dict) -> dict:
+    preview = {**preview, "_owner_id": _owner()}
     STUDY_PLAN_PREVIEWS[str(preview["study_plan_id"])] = preview
     return preview
 
 
 def get_study_plan_preview(study_plan_id: str) -> dict | None:
-    return STUDY_PLAN_PREVIEWS.get(str(study_plan_id))
+    preview = STUDY_PLAN_PREVIEWS.get(str(study_plan_id))
+    if not preview or preview.get("_owner_id") != _owner():
+        return None
+    return preview
 
 
 def delete_study_plan_preview(study_plan_id: str) -> None:

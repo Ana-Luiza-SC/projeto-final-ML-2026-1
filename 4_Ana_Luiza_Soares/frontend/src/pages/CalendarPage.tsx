@@ -3,14 +3,12 @@ import {
   cancelCalendarEvent,
   completeCalendarEvent,
   confirmCalendarPreview,
-  confirmWeeklyPlan,
   createCalendarEvent,
-  createWeeklyPlanPreview,
   listCalendarEvents,
   listDisciplines,
   previewCalendarExtraction,
 } from "../api/client";
-import type { AcademicEvent, CalendarDraftEvent, CalendarEventType, Discipline, PlannedStudyBlockPreview, RecurrenceRule, StudyPlanDay, WeeklyAvailabilityWindow, WeeklyPlanPreview } from "../types";
+import type { AcademicEvent, CalendarDraftEvent, CalendarEventType, Discipline, RecurrenceRule, StudyPlanDay } from "../types";
 
 const EVENT_TYPES: { value: CalendarEventType; label: string }[] = [
   { value: "exam", label: "Prova" },
@@ -34,9 +32,8 @@ function eventDate(event: AcademicEvent) { return event.start_at.slice(0, 10); }
 function labelForType(type: CalendarEventType) { return EVENT_TYPES.find((item) => item.value === type)?.label ?? type; }
 function timeRange(event: Pick<AcademicEvent, "start_at" | "end_at" | "all_day">) { return event.all_day ? "Dia todo" : `${event.start_at.slice(11, 16)}-${event.end_at?.slice(11, 16) ?? ""}`; }
 function sourceLabel(event: AcademicEvent) { if (event.source === "study_plan") return "Estudo"; if (event.source === "assessment") return "Avaliacao"; if (event.source === "course_plan") return "Plano"; return "Manual"; }
-function minutesBetween(start: string, end: string) { const [sh, sm] = start.split(":").map(Number); const [eh, em] = end.split(":").map(Number); return (eh * 60 + em) - (sh * 60 + sm); }
 
-export function CalendarPage() {
+export function CalendarPage({ onAdjustPlan }: { onAdjustPlan: () => void }) {
   const [view, setView] = useState<"month" | "week">("month");
   const [cursor, setCursor] = useState(() => monthStart(new Date()));
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
@@ -47,7 +44,6 @@ export function CalendarPage() {
   const [previewDisciplineId, setPreviewDisciplineId] = useState("");
   const [drafts, setDrafts] = useState<CalendarDraftEvent[]>([]);
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const [planPreview, setPlanPreview] = useState<WeeklyPlanPreview | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [manualDate, setManualDate] = useState(isoDate(new Date()));
@@ -58,11 +54,6 @@ export function CalendarPage() {
   const [recurrenceEndMode, setRecurrenceEndMode] = useState<"never" | "on_date" | "after_count">("never");
   const [recurrenceUntil, setRecurrenceUntil] = useState("");
   const [recurrenceCount, setRecurrenceCount] = useState(6);
-  const [objectiveText, setObjectiveText] = useState("");
-  const [availability, setAvailability] = useState<WeeklyAvailabilityWindow[]>([
-    { weekday: "monday", start_time: "18:00", end_time: "20:00", available: true },
-    { weekday: "wednesday", start_time: "18:00", end_time: "20:00", available: true },
-  ]);
 
   const range = useMemo(() => {
     if (view === "week") {
@@ -76,7 +67,6 @@ export function CalendarPage() {
   }, [cursor, view]);
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => { const day = new Date(startOfWeek(cursor)); day.setDate(day.getDate() + index); return day; }), [cursor]);
-  const weeklyTotal = useMemo(() => availability.filter((item) => item.available !== false).reduce((total, item) => total + Math.max(0, minutesBetween(item.start_time, item.end_time)), 0), [availability]);
 
   async function refresh() {
     setLoading(true); setMessage(null);
@@ -124,24 +114,11 @@ export function CalendarPage() {
     const result = await confirmCalendarPreview(previewDisciplineId, previewId, drafts);
     setPreviewId(null); setDrafts([]); setMessage(`${result.created_count} evento(s) confirmado(s). ${result.skipped_events.length} ignorado(s).`); await refresh();
   }
-  async function handleWeeklyPreview() {
-    setLoading(true); setMessage(null);
-    try { const result = await createWeeklyPlanPreview({ week_start: isoDate(startOfWeek(cursor)), windows: availability, objective_text: objectiveText || null }); setPlanPreview(result); setMessage(`${result.planned_blocks.length} bloco(s) planejado(s) para revisao.`); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Nao foi possivel gerar o planejamento."); }
-    finally { setLoading(false); }
-  }
-  async function handleConfirmWeeklyPlan() {
-    if (!planPreview) return;
-    const result = await confirmWeeklyPlan(planPreview.study_plan_id);
-    setMessage(`${result.created_count} bloco(s) persistido(s) no calendario.`); setPlanPreview(null); await refresh();
-  }
-  function updateWindow(index: number, patch: Partial<WeeklyAvailabilityWindow>) { setAvailability((items) => items.map((item, i) => i === index ? { ...item, ...patch } : item)); }
-
   return (
     <section className="page-stack calendar-page">
       <div className="page-header">
         <div><p className="eyebrow">Calendario academico</p><h1>Calendario</h1><p>Eventos, recorrencias e blocos planejados aparecem nas visoes de mes e semana apos confirmacao.</p></div>
-        <div className="button-row"><button className={view === "month" ? "primary-button" : "secondary-button"} onClick={() => setView("month")}>Mes</button><button className={view === "week" ? "primary-button" : "secondary-button"} onClick={() => setView("week")}>Semana</button></div>
+        <div className="button-row"><button className="secondary-button" onClick={onAdjustPlan}>Ajustar plano semanal</button><button className={view === "month" ? "primary-button" : "secondary-button"} onClick={() => setView("month")}>Mes</button><button className={view === "week" ? "primary-button" : "secondary-button"} onClick={() => setView("week")}>Semana</button></div>
       </div>
       {message && <div className="status-card">{message}</div>}
       <div className="calendar-toolbar card">
@@ -159,8 +136,7 @@ export function CalendarPage() {
         {weekDays.map((day) => { const key = isoDate(day); const dayEvents = (eventsByDate.get(key) ?? []).sort((a, b) => a.start_at.localeCompare(b.start_at)); return <div key={key} className="week-column"><strong>{day.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })}</strong>{dayEvents.map((event) => <button key={event.occurrence_id ?? event.id} className={`event-pill ${event.event_type} ${event.status}`} onClick={() => setSelectedEvent(event)}><span>{timeRange(event)}</span> {event.title}</button>)}{!dayEvents.length && <small>Sem eventos.</small>}</div>; })}
       </div>}
 
-      <div className="two-column">
-        <div className="card form-card">
+      <div className="card form-card calendar-event-form">
           <h2>Criar evento manual</h2>
           <label>Titulo<input value={manualTitle} onChange={(event) => setManualTitle(event.target.value)} placeholder="Ex.: grupo de estudo" /></label>
           <label>Data<input type="date" value={manualDate} onChange={(event) => setManualDate(event.target.value)} /></label>
@@ -168,19 +144,7 @@ export function CalendarPage() {
           <label>Recorrencia<select value={recurrenceFrequency} onChange={(event) => setRecurrenceFrequency(event.target.value as RecurrenceRule["frequency"])}><option value="none">Nao repete</option><option value="daily">Diaria</option><option value="weekly">Semanal</option><option value="biweekly">A cada duas semanas</option><option value="monthly">Mensal</option><option value="yearly">Anual</option><option value="custom_weekly">Semanal personalizada</option></select></label>
           {recurrenceFrequency !== "none" && <><div className="weekday-picker">{WEEKDAYS.map((day) => <label key={day.value}><input type="checkbox" checked={recurrenceWeekdays.includes(day.value)} onChange={(event) => setRecurrenceWeekdays((items) => event.target.checked ? [...items, day.value] : items.filter((item) => item !== day.value))} /> {day.label}</label>)}</div><label>Termino<select value={recurrenceEndMode} onChange={(event) => setRecurrenceEndMode(event.target.value as "never" | "on_date" | "after_count")}><option value="never">Nunca</option><option value="on_date">Em uma data</option><option value="after_count">Apos ocorrencias</option></select></label>{recurrenceEndMode === "on_date" && <input type="date" value={recurrenceUntil} onChange={(event) => setRecurrenceUntil(event.target.value)} />}{recurrenceEndMode === "after_count" && <input type="number" min="1" max="500" value={recurrenceCount} onChange={(event) => setRecurrenceCount(Number(event.target.value))} />}</>}
           <button className="primary-button" onClick={() => void handleCreateManual()}>Criar evento</button>
-        </div>
-
-        <div className="card form-card">
-          <h2>Planejamento semanal</h2>
-          <p className="muted">Total calculado: {Math.floor(weeklyTotal / 60)}h{weeklyTotal % 60 ? ` ${weeklyTotal % 60}min` : ""}</p>
-          {availability.map((window, index) => <div key={index} className="draft-card"><select value={window.weekday} onChange={(event) => updateWindow(index, { weekday: event.target.value as StudyPlanDay })}>{WEEKDAYS.map((day) => <option key={day.value} value={day.value}>{day.label}</option>)}</select><input type="time" value={window.start_time} onChange={(event) => updateWindow(index, { start_time: event.target.value })} /><input type="time" value={window.end_time} onChange={(event) => updateWindow(index, { end_time: event.target.value })} /><label><input type="checkbox" checked={window.available !== false} onChange={(event) => updateWindow(index, { available: event.target.checked })} /> Disponivel</label><button className="secondary-button" onClick={() => setAvailability((items) => items.filter((_, i) => i !== index))}>Remover</button></div>)}
-          <button className="secondary-button" onClick={() => setAvailability((items) => [...items, { weekday: "friday", start_time: "18:00", end_time: "20:00", available: true }])}>Adicionar janela</button>
-          <label>Objetivo opcional<textarea value={objectiveText} onChange={(event) => setObjectiveText(event.target.value)} /></label>
-          <button className="primary-button" disabled={loading || weeklyTotal < 30} onClick={() => void handleWeeklyPreview()}>Gerar preview</button>
-        </div>
       </div>
-
-      {planPreview && <div className="card"><h2>Preview do plano</h2><div className="draft-list">{planPreview.planned_blocks.map((block: PlannedStudyBlockPreview) => <div key={block.temporary_id} className="draft-card"><strong>{block.title}</strong><small>{block.start_at.slice(0, 16).replace("T", " ")} - {block.end_at.slice(11, 16)} · prioridade {block.priority_score}</small><small>{block.reason}</small></div>)}</div>{planPreview.unallocated_priorities.map((item) => <p key={item.discipline_id} className="warning-text">Sem capacidade: {item.discipline_code ?? item.discipline_name}</p>)}{planPreview.conflicts.map((item) => <p key={item} className="warning-text">Conflito: {item}</p>)}<div className="button-row"><button className="primary-button" onClick={() => void handleConfirmWeeklyPlan()}>Confirmar blocos</button><button className="secondary-button" onClick={() => setPlanPreview(null)}>Cancelar</button></div></div>}
 
       <div className="card form-card"><h2>Extrair eventos do plano</h2><p>Selecione uma disciplina com plano confirmado. A extracao gera preview editavel e nao salva automaticamente.</p><select value={previewDisciplineId} onChange={(event) => setPreviewDisciplineId(event.target.value)}>{disciplines.map((discipline) => <option key={discipline.id} value={discipline.id}>{discipline.code} · {discipline.name}</option>)}</select><button className="secondary-button" disabled={loading || !previewDisciplineId} onClick={() => void handlePreviewExtraction()}>Extrair eventos do plano de ensino</button></div>
       {drafts.length > 0 && <div className="card"><h2>Preview de eventos extraidos</h2><div className="draft-list">{drafts.map((draft, index) => <div key={draft.temporary_id} className="draft-card"><input value={draft.title} onChange={(event) => setDrafts((items) => items.map((item, i) => i === index ? { ...item, title: event.target.value } : item))} /><select value={draft.event_type} onChange={(event) => setDrafts((items) => items.map((item, i) => i === index ? { ...item, event_type: event.target.value as CalendarEventType } : item))}>{EVENT_TYPES.filter((type) => type.value !== "study_block").map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><input type="date" value={draft.start_at?.slice(0, 10) ?? ""} onChange={(event) => setDrafts((items) => items.map((item, i) => i === index ? { ...item, start_at: event.target.value ? `${event.target.value}T00:00:00-03:00` : null, ambiguous: !event.target.value } : item))} /><small>Evidencia: {draft.source_evidence}</small><button className="secondary-button" onClick={() => setDrafts((items) => items.filter((_, i) => i !== index))}>Remover</button></div>)}</div><div className="button-row"><button className="primary-button" onClick={() => void handleConfirmPreview()}>Confirmar preview</button><button className="secondary-button" onClick={() => { setDrafts([]); setPreviewId(null); }}>Cancelar</button></div></div>}

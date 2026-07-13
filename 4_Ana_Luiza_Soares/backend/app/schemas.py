@@ -448,6 +448,7 @@ class WeeklyPriorityEvidence(BaseModel):
 
 
 class WeeklyPriorityResult(BaseModel):
+    priority_item_id: str
     discipline_id: UUID
     discipline_code: str | None = None
     discipline_name: str
@@ -460,6 +461,9 @@ class WeeklyPriorityResult(BaseModel):
     evidence_used: list[WeeklyPriorityEvidence] = Field(default_factory=list)
     missing_evidence: list[str] = Field(default_factory=list)
     reason: str
+    estimated_demand_minutes: int | None = Field(default=None, ge=0)
+    demand_confidence: float = Field(default=0, ge=0, le=1)
+    demand_reason: str
 
 
 class PlannedStudyBlockPreview(BaseModel):
@@ -478,6 +482,43 @@ class PlannedStudyBlockPreview(BaseModel):
     state: Literal["planned"] = "planned"
 
 
+CapacityReason = Literal[
+    "fully_allocated",
+    "partially_allocated",
+    "insufficient_conflict_free_capacity",
+    "no_window_before_deadline",
+    "fragments_below_minimum",
+    "deadline_expired",
+    "demand_unknown",
+    "excluded_by_user",
+    "conflict_introduced_after_preview",
+]
+
+
+class CapacityBlockingEvent(BaseModel):
+    event_id: UUID
+    title: str
+    blocked_minutes: int = Field(..., ge=0)
+
+
+class PriorityCapacityAnalysis(BaseModel):
+    priority_item_id: str
+    discipline_id: UUID
+    discipline_name: str
+    requested_minutes: int | None = Field(default=None, ge=0)
+    allocated_minutes: int = Field(..., ge=0)
+    remaining_minutes: int | None = Field(default=None, ge=0)
+    available_minutes_before_deadline: int = Field(..., ge=0)
+    usable_minutes_before_deadline: int = Field(..., ge=0)
+    blocked_minutes: int = Field(..., ge=0)
+    allocated_to_higher_priorities_minutes: int = Field(..., ge=0)
+    minimum_useful_block_minutes: int = Field(..., gt=0)
+    deadline_at: datetime | None = None
+    reason_code: CapacityReason
+    reason: str
+    blocking_events: list[CapacityBlockingEvent] = Field(default_factory=list)
+
+
 class WeeklyPlanPreviewResponse(BaseModel):
     study_plan_id: UUID
     week_start: Date
@@ -486,6 +527,7 @@ class WeeklyPlanPreviewResponse(BaseModel):
     ranked_priorities: list[WeeklyPriorityResult]
     planned_blocks: list[PlannedStudyBlockPreview]
     unallocated_priorities: list[WeeklyPriorityResult] = Field(default_factory=list)
+    capacity_analysis: list[PriorityCapacityAnalysis] = Field(default_factory=list)
     conflicts: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     algorithm_version: str

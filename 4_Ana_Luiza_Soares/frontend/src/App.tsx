@@ -206,8 +206,12 @@ export default function App() {
           onBack={navigation.goDisciplines}
         />
       )}
-      {route.page === "study-plan" && <StudyPlanPage />}
-      {route.page === "calendar" && <CalendarPage />}
+      {route.page === "study-plan" && (
+        <StudyPlanPage onOpenCalendar={navigation.goCalendar} />
+      )}
+      {route.page === "calendar" && (
+        <CalendarPage onAdjustPlan={navigation.goStudyPlan} />
+      )}
       {route.page === "matricula-import" && (
         <MatriculaImportPage onOpenDisciplines={navigation.goDisciplines} />
       )}
