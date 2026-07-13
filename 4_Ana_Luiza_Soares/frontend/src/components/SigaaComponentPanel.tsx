@@ -15,6 +15,10 @@ function emptyText(value?: string | null, fallback = "Não disponível na fonte 
   return value && value.trim() ? value : fallback;
 }
 
+function hoursText(value?: number | null) {
+  return value != null ? `${value}h` : "Não disponível";
+}
+
 export function SigaaComponentPanel({
   discipline,
   result,
@@ -67,7 +71,10 @@ export function SigaaComponentPanel({
             <div><dt>Nome</dt><dd>{component.name}</dd></div>
             <div><dt>Tipo</dt><dd>{component.type || "Não informado"}</dd></div>
             <div><dt>Unidade</dt><dd>{component.unit || "Não informada"}</dd></div>
-            <div><dt>Carga horária</dt><dd>{component.workload_hours != null ? `${component.workload_hours}h` : "Não informada"}</dd></div>
+            <div><dt>Carga horária total</dt><dd>{hoursText(component.workload_hours)}</dd></div>
+            <div><dt>Carga teórica</dt><dd>{hoursText(component.theoretical_workload_hours)}</dd></div>
+            <div><dt>Carga prática</dt><dd>{hoursText(component.practical_workload_hours)}</dd></div>
+            <div><dt>Pré-requisitos</dt><dd>{emptyText(component.prerequisites, "Não disponível")}</dd></div>
           </dl>
           <div className="sigaa-text-block">
             <h3>Ementa</h3>
@@ -88,7 +95,7 @@ export function SigaaComponentPanel({
         <div className="sigaa-attached">
           <h3>Dados associados</h3>
           <p><strong>Código SIGAA:</strong> {discipline.sigaa_code || "Não informado"}</p>
-          <p><strong>Carga horária:</strong> {discipline.workload_hours != null ? `${discipline.workload_hours}h` : "Não informada"}</p>
+          <p><strong>Carga horária total:</strong> {hoursText(discipline.workload_hours)}</p>
           <p><strong>Ementa:</strong> {emptyText(discipline.syllabus, "Ementa não disponível na fonte consultada.")}</p>
           <p><strong>Programa atual:</strong> {emptyText(discipline.current_program, "Programa atual não disponível na fonte consultada.")}</p>
           {discipline.sigaa_source_url && <p><a href={discipline.sigaa_source_url} target="_blank" rel="noreferrer">Fonte pública associada</a></p>}

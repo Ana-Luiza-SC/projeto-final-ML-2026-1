@@ -40,20 +40,28 @@ class FakeSession:
         self.get_response = get_response
         self.get_responses = list(get_response) if isinstance(get_response, (list, tuple)) else None
         self.post_response = post_response
+        self.post_responses = list(post_response) if isinstance(post_response, (list, tuple)) else None
         self.get_calls: list[dict[str, object]] = []
         self.post_calls: list[dict[str, object]] = []
         self.headers: dict[str, str] = {}
         self.closed = False
 
+    def _resolve(self, value):
+        if isinstance(value, BaseException):
+            raise value
+        return value
+
     def get(self, url: str, **kwargs):
         self.get_calls.append({"url": url, **kwargs})
         if self.get_responses is not None:
-            return self.get_responses.pop(0)
-        return self.get_response
+            return self._resolve(self.get_responses.pop(0))
+        return self._resolve(self.get_response)
 
     def post(self, url: str, **kwargs):
         self.post_calls.append({"url": url, **kwargs})
-        return self.post_response
+        if self.post_responses is not None:
+            return self._resolve(self.post_responses.pop(0))
+        return self._resolve(self.post_response)
 
     def close(self) -> None:
         self.closed = True
@@ -195,8 +203,8 @@ def test_extract_jsf_form_rejects_missing_viewstate():
 
 def test_search_sigaa_component_uses_same_session_and_posts_payload():
     fake_session = FakeSession(
-        [FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_component_details.html"), url="https://sigaa.unb.br/sigaa/public/componentes/visualiza_componente.jsf?id=180378")],
-        FakeResponse(fixture("sigaa_component_found.html")),
+        [FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_turma_search_form.html"), url=sigaa_components.SIGAA_TURMAS_URL)],
+        [FakeResponse(fixture("sigaa_component_found.html")), FakeResponse(fixture("sigaa_turma_result_dynamic_id.html"), url=sigaa_components.SIGAA_TURMAS_URL), FakeResponse(fixture("sigaa_turma_detail.html"), url=sigaa_components.SIGAA_TURMAS_URL)],
     )
 
     response = sigaa_components.search_sigaa_component("FGA0315", session=fake_session)
@@ -205,10 +213,12 @@ def test_search_sigaa_component_uses_same_session_and_posts_payload():
     assert response.component.syllabus == "Qualidade de produto, processo e medição de software."
     assert response.component.details_processed is True
     assert len(fake_session.get_calls) == 3
-    assert len(fake_session.post_calls) == 1
+    assert len(fake_session.post_calls) == 3
     assert fake_session.get_calls[0]["url"] == sigaa_components.SIGAA_PUBLIC_HOME_URL
     assert fake_session.get_calls[1]["url"] == sigaa_components.SIGAA_COMPONENTS_SEARCH_URL
     assert fake_session.post_calls[0]["url"] == sigaa_components.SIGAA_COMPONENTS_URL
+    assert fake_session.post_calls[1]["url"] == sigaa_components.SIGAA_TURMAS_URL
+    assert fake_session.post_calls[2]["url"] == sigaa_components.SIGAA_TURMAS_URL
     payload = fake_session.post_calls[0]["data"]
     assert payload["javax.faces.ViewState"] == "j_id1"
     assert payload["form:nivel"] == "G"
@@ -216,12 +226,21 @@ def test_search_sigaa_component_uses_same_session_and_posts_payload():
     assert payload["form:j_id_jsp_190531263_11"] == "FGA0315"
     assert payload["form:j_id_jsp_190531263_13"] == ""
     assert payload["form:btnBuscarComponentes"] == "Buscar Componentes"
+    detail_payload = fake_session.post_calls[2]["data"]
+    assert detail_payload["formTurma"] == "formTurma"
+    assert detail_payload["formTurma:inputDepto"] == "673"
+    assert detail_payload["formTurma:inputAno"] == "2026"
+    assert detail_payload["formTurma:inputPeriodo"] == "2"
+    assert detail_payload["javax.faces.ViewState"] == "turma-vs-result"
+    assert detail_payload["formTurma:aqui"] == "formTurma:aqui"
+    assert detail_payload["id"] == "316553"
+    assert detail_payload["publico"] == "public"
 
 
 def test_endpoint_search_returns_found_with_fixture(client, monkeypatch):
     fake_session = FakeSession(
-        [FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_component_details.html"), url="https://sigaa.unb.br/sigaa/public/componentes/visualiza_componente.jsf?id=180378")],
-        FakeResponse(fixture("sigaa_component_found.html")),
+        [FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_turma_search_form.html"), url=sigaa_components.SIGAA_TURMAS_URL)],
+        [FakeResponse(fixture("sigaa_component_found.html")), FakeResponse(fixture("sigaa_turma_result_dynamic_id.html"), url=sigaa_components.SIGAA_TURMAS_URL), FakeResponse(fixture("sigaa_turma_detail.html"), url=sigaa_components.SIGAA_TURMAS_URL)],
     )
     monkeypatch.setattr(sigaa_components, "_create_session", lambda: fake_session)
 
@@ -232,13 +251,13 @@ def test_endpoint_search_returns_found_with_fixture(client, monkeypatch):
     assert body["status"] == "found"
     assert body["component"]["code"] == "FGA0315"
     assert len(fake_session.get_calls) == 3
-    assert len(fake_session.post_calls) == 1
+    assert len(fake_session.post_calls) == 3
 
 
 def test_endpoint_search_returns_not_found_without_breaking(client, monkeypatch):
     fake_session = FakeSession(
-        [FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_component_details.html"), url="https://sigaa.unb.br/sigaa/public/componentes/visualiza_componente.jsf?id=180378")],
-        FakeResponse(fixture("sigaa_component_not_found.html")),
+        [FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_turma_search_form.html"), url=sigaa_components.SIGAA_TURMAS_URL)],
+        [FakeResponse(fixture("sigaa_component_not_found.html"))],
     )
     monkeypatch.setattr(sigaa_components, "_create_session", lambda: fake_session)
 
@@ -254,7 +273,7 @@ def test_endpoint_search_returns_not_found_without_breaking(client, monkeypatch)
 def test_cache_returns_cached_true_on_second_query(client, monkeypatch):
     cached_response = sigaa_components.parse_component_results(
         fixture("sigaa_component_found.html"),
-        "FGA0315", fixture("sigaa_component_details.html"), details_processed=True,
+        "FGA0315", fixture("sigaa_turma_detail.html"), details_processed=True,
     )
     sigaa_components.set_cached_component("FGA0315", cached_response)
 
@@ -318,9 +337,150 @@ def test_detail_redirect_to_login_is_rejected():
 
 def test_incomplete_legacy_cache_is_invalidated():
     legacy = sigaa_components.parse_component_results(fixture("sigaa_component_found.html"), "FGA0315")
-    sigaa_components.set_cached_component("FGA0315", legacy)
+    sigaa_components._write_cache({"FGA0315": legacy.model_dump(mode="json")})
     assert sigaa_components.get_cached_component("FGA0315") is None
 
 def test_detail_without_syllabus_does_not_invent_value():
     details = sigaa_components.parse_sigaa_component_details("<div><b>Programa atual:</b> Unidade 1</div>", "https://sigaa.unb.br/sigaa/public/x")
     assert details["syllabus"] == ""
+
+
+def test_extract_turma_detail_id_from_dynamic_result_page():
+    turma_id = sigaa_components.extract_turma_detail_id(
+        fixture("sigaa_turma_result_dynamic_id.html"),
+        "FGA0315",
+    )
+
+    assert turma_id == "316553"
+
+
+def test_extract_turma_detail_id_with_changed_jsp_identifier():
+    turma_id = sigaa_components.extract_turma_detail_id(
+        fixture("sigaa_turma_result_changed_jids.html"),
+        "FGA0315",
+    )
+
+    assert turma_id == "316554"
+
+
+def test_extract_turma_detail_id_returns_none_for_malformed_result_link():
+    assert sigaa_components.extract_turma_detail_id(fixture("sigaa_turma_result_malformed_link.html"), "FGA0315") is None
+
+
+def test_parse_turma_detail_semantic_labels_with_colons():
+    details = sigaa_components.parse_sigaa_component_details(
+        fixture("sigaa_turma_detail.html"),
+        sigaa_components.SIGAA_TURMAS_URL,
+    )
+
+    assert details["code"] == "FGA0315"
+    assert details["name"] == "QUALIDADE DE SOFTWARE 1"
+    assert details["prerequisites"] == "FGA0001"
+    assert details["syllabus"] == "Qualidade de produto, processo e medição de software."
+    assert details["theoretical_workload_hours"] == "30 h"
+    assert details["practical_workload_hours"] == "30 h"
+
+
+def test_turma_detail_missing_syllabus_does_not_invent_value():
+    response = sigaa_components.parse_component_results(
+        fixture("sigaa_component_found.html"),
+        "FGA0315",
+        fixture("sigaa_turma_detail_missing_syllabus.html"),
+        details_processed=True,
+    )
+
+    assert response.component is not None
+    assert response.component.syllabus == ""
+    assert response.component.details_processed is True
+    assert response.component.workload_hours == 60
+
+
+def test_turma_detail_missing_workload_preserves_primary_workload():
+    response = sigaa_components.parse_component_results(
+        fixture("sigaa_component_found.html"),
+        "FGA0315",
+        fixture("sigaa_turma_detail_missing_workload.html"),
+        details_processed=True,
+    )
+
+    assert response.component is not None
+    assert response.component.syllabus == "Qualidade de produto, processo e medição de software."
+    assert response.component.workload_hours == 60
+    assert response.component.theoretical_workload_hours is None
+    assert response.component.practical_workload_hours is None
+
+
+def test_expired_turma_viewstate_preserves_basic_component_data():
+    fake_session = FakeSession(
+        [FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_turma_search_form.html"), url=sigaa_components.SIGAA_TURMAS_URL)],
+        [FakeResponse(fixture("sigaa_component_found.html")), FakeResponse(fixture("sigaa_turma_result_dynamic_id.html"), url=sigaa_components.SIGAA_TURMAS_URL), FakeResponse(fixture("sigaa_turma_detail_expired_viewstate.html"), url=sigaa_components.SIGAA_TURMAS_URL)],
+    )
+
+    response = sigaa_components.search_sigaa_component("FGA0315", session=fake_session)
+
+    assert response.status == "found"
+    assert response.component is not None
+    assert response.component.code == "FGA0315"
+    assert response.component.name == "QUALIDADE DE SOFTWARE 1"
+    assert response.component.details_processed is False
+    assert response.warnings
+
+
+def test_turma_detail_timeout_preserves_basic_component_data():
+    fake_session = FakeSession(
+        [FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_turma_search_form.html"), url=sigaa_components.SIGAA_TURMAS_URL)],
+        [FakeResponse(fixture("sigaa_component_found.html")), FakeResponse(fixture("sigaa_turma_result_dynamic_id.html"), url=sigaa_components.SIGAA_TURMAS_URL), requests.Timeout("timeout")],
+    )
+
+    response = sigaa_components.search_sigaa_component("FGA0315", session=fake_session)
+
+    assert response.status == "found"
+    assert response.component is not None
+    assert response.component.code == "FGA0315"
+    assert response.component.name == "QUALIDADE DE SOFTWARE 1"
+    assert response.component.syllabus == ""
+    assert response.warnings
+
+
+def test_external_domain_rejected_for_public_sigaa_url():
+    with pytest.raises(sigaa_components.SigaaSessionRedirectError):
+        sigaa_components.fetch_component_details(
+            FakeSession(FakeResponse("", url="https://evil.example/sigaa/public/x"), FakeResponse("")),
+            "https://evil.example/sigaa/public/componentes/detalhe.jsf?id=1",
+            sigaa_components.SIGAA_COMPONENTS_URL,
+        )
+
+
+def test_malformed_turma_result_preserves_code_and_name():
+    fake_session = FakeSession(
+        [FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_jsf_form_initial.html")), FakeResponse(fixture("sigaa_turma_search_form.html"), url=sigaa_components.SIGAA_TURMAS_URL)],
+        [FakeResponse(fixture("sigaa_component_found.html")), FakeResponse(fixture("sigaa_turma_result_malformed_link.html"), url=sigaa_components.SIGAA_TURMAS_URL)],
+    )
+
+    response = sigaa_components.search_sigaa_component("FGA0315", session=fake_session)
+
+    assert response.status == "found"
+    assert response.component is not None
+    assert response.component.code == "FGA0315"
+    assert response.component.name == "QUALIDADE DE SOFTWARE 1"
+    assert response.component.syllabus == ""
+    assert response.warnings
+
+
+def test_cache_file_stores_parser_metadata_and_detail_status():
+    response = sigaa_components.parse_component_results(
+        fixture("sigaa_component_found.html"),
+        "FGA0315",
+        fixture("sigaa_turma_detail.html"),
+        details_processed=True,
+    )
+
+    assert response.component is not None
+    response.component.source_url = sigaa_components.SIGAA_TURMAS_URL
+    sigaa_components.set_cached_component("FGA0315", response)
+    cached = sigaa_components._read_cache()["FGA0315"]
+
+    assert cached["metadata"]["parser_version"] == sigaa_components.CACHE_PARSER_VERSION
+    assert cached["metadata"]["source_url"] == sigaa_components.SIGAA_TURMAS_URL
+    assert cached["metadata"]["fetched_at"]
+    assert cached["metadata"]["detail_status"] == "detail_found"

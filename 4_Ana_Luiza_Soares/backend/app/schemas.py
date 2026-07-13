@@ -503,6 +503,7 @@ class SigaaComponent(BaseModel):
     workload_hours: int | None = Field(default=None, ge=0)
     syllabus: str | None = None
     current_program: str | None = None
+    prerequisites: str | None = None
     theoretical_workload_hours: int | None = Field(default=None, ge=0)
     practical_workload_hours: int | None = Field(default=None, ge=0)
     details_processed: bool = False
@@ -518,6 +519,10 @@ class SigaaComponent(BaseModel):
                 "workload_hours": 60,
                 "syllabus": "",
                 "current_program": "",
+                "prerequisites": None,
+                "theoretical_workload_hours": 30,
+                "practical_workload_hours": 30,
+                "details_processed": True,
                 "source_url": "https://sigaa.unb.br/sigaa/public/componentes/busca_componentes.jsf",
             }
         }

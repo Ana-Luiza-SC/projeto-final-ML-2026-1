@@ -191,6 +191,10 @@ export type SigaaComponent = {
   workload_hours?: number | null;
   syllabus?: string | null;
   current_program?: string | null;
+  prerequisites?: string | null;
+  theoretical_workload_hours?: number | null;
+  practical_workload_hours?: number | null;
+  details_processed?: boolean;
   source_url: string;
 };
 

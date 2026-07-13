@@ -5,6 +5,11 @@ import {
   type ComplexityAnalysis,
 } from "../api/client";
 import type { Discipline } from "../types";
+
+function hoursText(value?: number | null) {
+  return value != null ? `${value}h` : "Não disponível";
+}
+
 export function CatalogOverview({
   discipline,
   onRefresh,
@@ -56,10 +61,10 @@ export function CatalogOverview({
           Atualizar catálogo
         </button>
       </div>
-      <p>
-        {discipline.syllabus ||
-          "Ementa não disponível no catálogo. Você pode manter os dados manualmente e tentar atualizar depois."}
-      </p>
+      <dl className="compact-grid">
+        <div><dt>Carga horária total</dt><dd>{hoursText(discipline.workload_hours)}</dd></div>
+        <div><dt>Ementa</dt><dd>{discipline.syllabus || "Não disponível"}</dd></div>
+      </dl>
       <p className="muted">
         Origem:{" "}
         {discipline.sigaa_source_url ? "SIGAA público" : "cadastro manual"}

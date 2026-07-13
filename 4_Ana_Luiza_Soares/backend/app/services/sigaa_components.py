@@ -6,6 +6,7 @@ import re
 import threading
 import time
 import unicodedata
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,11 +24,22 @@ logger = logging.getLogger(__name__)
 
 SIGAA_COMPONENTS_URL = "https://sigaa.unb.br/sigaa/public/componentes/busca_componentes.jsf"
 SIGAA_COMPONENTS_SEARCH_URL = SIGAA_COMPONENTS_URL + "?nivel=G&aba=p-graduacao"
+SIGAA_TURMAS_URL = "https://sigaa.unb.br/sigaa/public/turmas/listar.jsf"
 SIGAA_PUBLIC_HOME_URL = "https://sigaa.unb.br/sigaa/public/home.jsf"
 SIGAA_ORIGIN = "https://sigaa.unb.br"
+SIGAA_ALLOWED_HOST = "sigaa.unb.br"
 SOURCE = "sigaa_public_components"
 USER_AGENT = "EstudaUnB/0.1 public-components-lookup"
 TIMEOUT_SECONDS = 6
+MAX_RESPONSE_BYTES = 1_000_000
+CACHE_PARSER_VERSION = "sigaa-components-v3-turma-detail"
+SIGAA_TURMA_SEARCH_FIELDS = {
+    "formTurma": "formTurma",
+    "formTurma:inputNivel": "",
+    "formTurma:inputDepto": "673",
+    "formTurma:inputAno": "2026",
+    "formTurma:inputPeriodo": "2",
+}
 MIN_REQUEST_INTERVAL_SECONDS = 0.25
 _rate_lock = threading.Lock()
 _last_public_request = 0.0
@@ -58,6 +70,10 @@ class SigaaSessionRedirectError(ValueError):
     pass
 
 
+class SigaaResponseTooLargeError(ValueError):
+    pass
+
+
 def normalize_query(query: str) -> str:
     return " ".join(query.strip().upper().split())
 
@@ -69,6 +85,25 @@ def _strip_accents(text: str) -> str:
 
 def _normalize_text(text: str) -> str:
     return " ".join(_strip_accents(text).casefold().split())
+
+
+def _public_sigaa_url(url: str, base_url: str = SIGAA_COMPONENTS_URL) -> str:
+    resolved = urljoin(base_url, url)
+    parsed = urlparse(resolved)
+    path = parsed.path.casefold()
+    if parsed.scheme != "https" or parsed.netloc != SIGAA_ALLOWED_HOST or not path.startswith("/sigaa/public/") or "login" in path:
+        raise SigaaSessionRedirectError("URL fora da área pública permitida do SIGAA.")
+    return resolved
+
+
+def _response_text(response: requests.Response) -> str:
+    content_length = response.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > MAX_RESPONSE_BYTES:
+        raise SigaaResponseTooLargeError("Resposta do SIGAA excedeu o limite permitido.")
+    text = response.text
+    if len(text.encode(getattr(response, "encoding", None) or "utf-8", errors="ignore")) > MAX_RESPONSE_BYTES:
+        raise SigaaResponseTooLargeError("Resposta do SIGAA excedeu o limite permitido.")
+    return text
 
 
 def _empty_response(status: str, query: str, warning: str) -> SigaaComponentSearchResponse:
@@ -96,13 +131,34 @@ def _write_cache(cache: dict[str, Any]) -> None:
     CACHE_FILE.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _cache_detail_status(response: SigaaComponentSearchResponse) -> str:
+    if response.component is None:
+        return response.status
+    if response.component.details_processed:
+        return "detail_found"
+    return "detail_unavailable"
+
+
 def get_cached_component(query: str) -> SigaaComponentSearchResponse | None:
     cache_key = normalize_query(query)
     cached = _read_cache().get(cache_key)
     if not cached:
         return None
-    response = SigaaComponentSearchResponse.model_validate(cached)
-    if response.component is not None and not response.component.details_processed:
+
+    metadata: dict[str, Any] = {}
+    payload = cached
+    if isinstance(cached, dict) and "response" in cached:
+        metadata = cached.get("metadata") or {}
+        payload = cached.get("response") or {}
+        if metadata.get("parser_version") != CACHE_PARSER_VERSION:
+            return None
+
+    response = SigaaComponentSearchResponse.model_validate(payload)
+    if response.component is not None and not response.component.details_processed and not metadata.get("detail_status"):
         return None
     response.cached = True
     return response
@@ -113,7 +169,15 @@ def set_cached_component(query: str, response: SigaaComponentSearchResponse) -> 
     cache = _read_cache()
     payload = response.model_dump(mode="json")
     payload["cached"] = False
-    cache[cache_key] = payload
+    cache[cache_key] = {
+        "metadata": {
+            "parser_version": CACHE_PARSER_VERSION,
+            "source_url": response.component.source_url if response.component else SIGAA_COMPONENTS_URL,
+            "fetched_at": _utc_iso(),
+            "detail_status": _cache_detail_status(response),
+        },
+        "response": payload,
+    }
     _write_cache(cache)
 
 
@@ -439,10 +503,11 @@ def fetch_search_form(session: requests.Session) -> str:
     )
     logger.info("SIGAA GET status=%s", response.status_code)
     response.raise_for_status()
-    return response.text
+    return _response_text(response)
 
 
 def submit_component_search(session: requests.Session, action_url: str, payload: dict[str, str]) -> str:
+    action_url = _public_sigaa_url(action_url)
     logger.info("SIGAA POST iniciado action=%s", action_url)
     response = session.post(
         action_url,
@@ -458,44 +523,168 @@ def submit_component_search(session: requests.Session, action_url: str, payload:
         response.url,
     )
     response.raise_for_status()
+    _public_sigaa_url(response.url)
     if urlparse(response.url).path != urlparse(SIGAA_COMPONENTS_URL).path:
         raise SigaaSessionRedirectError("O SIGAA redirecionou a busca para fora da página de componentes.")
-    return response.text
+    return _response_text(response)
 
 
 def fetch_component_details(session: requests.Session, detail_url: str, referer: str) -> str:
-    url = urljoin(SIGAA_COMPONENTS_URL, detail_url)
+    url = _public_sigaa_url(detail_url)
     response = session.get(url, headers={"User-Agent": USER_AGENT, "Referer": referer}, timeout=TIMEOUT_SECONDS, allow_redirects=True)
     response.raise_for_status()
-    parsed = urlparse(response.url)
-    path = parsed.path.casefold()
-    if parsed.netloc != urlparse(SIGAA_COMPONENTS_URL).netloc or "/public/" not in path or "login" in path:
-        raise SigaaSessionRedirectError("O SIGAA redirecionou o detalhe para login ou área autenticada.")
-    return response.text
+    _public_sigaa_url(response.url)
+    return _response_text(response)
+
+
+def _extract_viewstate_value(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    control = soup.find(attrs={"name": "javax.faces.ViewState"}) or soup.find(attrs={"id": "javax.faces.ViewState"})
+    if isinstance(control, Tag):
+        value = control.get("value", "")
+        if value:
+            return value
+    raise ValueError("ViewState ausente no formulário do SIGAA.")
+
+
+def build_turma_search_payload(view_state: str) -> dict[str, str]:
+    payload = dict(SIGAA_TURMA_SEARCH_FIELDS)
+    payload["javax.faces.ViewState"] = view_state
+    return payload
+
+
+def build_turma_detail_payload(search_payload: dict[str, str], view_state: str, turma_id: str) -> dict[str, str]:
+    payload = {key: value for key, value in search_payload.items() if key in SIGAA_TURMA_SEARCH_FIELDS}
+    payload.update(
+        {
+            "javax.faces.ViewState": view_state,
+            "formTurma:aqui": "formTurma:aqui",
+            "id": turma_id,
+            "publico": "public",
+        }
+    )
+    return payload
+
+
+def fetch_turma_search_form(session: requests.Session) -> str:
+    url = _public_sigaa_url(SIGAA_TURMAS_URL, SIGAA_TURMAS_URL)
+    logger.info("SIGAA GET turmas iniciado url=%s", url)
+    response = session.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT_SECONDS)
+    logger.info("SIGAA GET turmas status=%s", response.status_code)
+    response.raise_for_status()
+    return _response_text(response)
+
+
+def submit_turma_search(session: requests.Session, payload: dict[str, str]) -> str:
+    url = _public_sigaa_url(SIGAA_TURMAS_URL, SIGAA_TURMAS_URL)
+    logger.info("SIGAA POST turmas busca iniciado action=%s", url)
+    response = session.post(
+        url,
+        data=payload,
+        headers={"User-Agent": USER_AGENT, "Referer": SIGAA_TURMAS_URL, "Origin": SIGAA_ORIGIN},
+        timeout=TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    _public_sigaa_url(response.url, SIGAA_TURMAS_URL)
+    return _response_text(response)
+
+
+def submit_turma_detail(session: requests.Session, payload: dict[str, str]) -> str:
+    url = _public_sigaa_url(SIGAA_TURMAS_URL, SIGAA_TURMAS_URL)
+    logger.info("SIGAA POST turmas detalhe iniciado action=%s", url)
+    response = session.post(
+        url,
+        data=payload,
+        headers={"User-Agent": USER_AGENT, "Referer": SIGAA_TURMAS_URL, "Origin": SIGAA_ORIGIN},
+        timeout=TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    _public_sigaa_url(response.url, SIGAA_TURMAS_URL)
+    return _response_text(response)
+
+
+def _extract_id_from_jsf_call(raw: str) -> str | None:
+    patterns = [
+        r"['\"]id['\"]\s*[:=]\s*['\"]?(\d+)",
+        r"\bid=(\d+)\b",
+        r"name=['\"]id['\"][^>]+value=['\"](\d+)",
+        r"value=['\"](\d+)['\"][^>]+name=['\"]id['\"]",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, raw)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _candidate_detail_id(element: Tag) -> str | None:
+    candidates: list[Tag] = [element]
+    candidates.extend(element.find_all(["a", "button", "input"]))
+    for candidate in candidates:
+        raw = " ".join(str(value) for value in candidate.attrs.values())
+        if "formTurma:aqui" not in raw and "publico" not in raw and "id" not in raw:
+            continue
+        found = _extract_id_from_jsf_call(raw)
+        if found:
+            return found
+    return None
+
+
+def extract_turma_detail_id(html: str, query: str) -> str | None:
+    soup = BeautifulSoup(html, "html.parser")
+    normalized_query = _normalize_text(query)
+    rows = [row for row in soup.find_all("tr") if row.find_parent("thead") is None]
+    matching_rows = [row for row in rows if not normalized_query or normalized_query in _normalize_text(_text(row))]
+    for row in matching_rows + ([] if matching_rows else rows):
+        found = _candidate_detail_id(row)
+        if found:
+            return found
+    return None
+
+
+def fetch_turma_component_details(session: requests.Session, query: str) -> tuple[str, str]:
+    form_html = fetch_turma_search_form(session)
+    initial_view_state = _extract_viewstate_value(form_html)
+    search_payload = build_turma_search_payload(initial_view_state)
+    result_html = submit_turma_search(session, search_payload)
+    turma_id = extract_turma_detail_id(result_html, query)
+    if not turma_id:
+        raise ValueError("Não foi possível descobrir o identificador público da turma no SIGAA.")
+    detail_view_state = _extract_viewstate_value(result_html)
+    detail_payload = build_turma_detail_payload(search_payload, detail_view_state, turma_id)
+    return submit_turma_detail(session, detail_payload), SIGAA_TURMAS_URL
+
 
 def parse_sigaa_component_details(html: str, source_url: str) -> dict[str, str]:
     soup = BeautifulSoup(html, "html.parser")
     return {
+        "code": _find_labeled_value(soup, ["Código", "Codigo"]),
+        "name": _find_labeled_value(soup, ["Nome", "Componente Curricular"]),
+        "prerequisites": _find_labeled_value(soup, ["Pré-Requisitos", "Pre-Requisitos", "Pré Requisitos", "Pre Requisitos"]),
         "syllabus": _find_labeled_value(soup, ["Ementa/Descrição", "Ementa", "Descrição"]),
         "current_program": _find_labeled_value(soup, ["Programa atual", "Programa", "Conteúdo"]),
-        "workload_hours": _find_labeled_value(soup, ["Carga horária total", "Carga horária", "Carga Horária"]),
-        "theoretical_workload_hours": _find_labeled_value(soup, ["Carga horária teórica", "CH Teórica"]),
-        "practical_workload_hours": _find_labeled_value(soup, ["Carga horária prática", "CH Prática"]),
+        "workload_hours": _find_labeled_value(soup, ["Carga Horária Total", "Carga horária total", "Carga horária", "Carga Horária"]),
+        "theoretical_workload_hours": _find_labeled_value(soup, ["Carga Horária de Aula Teórica", "Carga horária teórica", "CH Teórica"]),
+        "practical_workload_hours": _find_labeled_value(soup, ["Carga Horária de Aula Prática", "Carga horária prática", "CH Prática"]),
         "source_url": source_url,
     }
 
 
+def _normalized_label(text: str) -> str:
+    return _normalize_text(text).rstrip(":：-")
+
+
 def _find_labeled_value(soup: BeautifulSoup, labels: list[str]) -> str:
-    normalized_labels = [_normalize_text(label) for label in labels]
+    normalized_labels = [_normalized_label(label) for label in labels]
     for row in soup.find_all(["tr", "p", "li", "div"]):
         text = _text(row)
-        text_normalized = _normalize_text(text)
+        text_normalized = _normalized_label(text)
         for label in normalized_labels:
+            header = row.find(["th", "dt", "strong", "label"])
+            value = row.find(["td", "dd"])
+            if header is not None and value is not None and _normalized_label(_text(header)) == label:
+                return _text(value)
             if text_normalized.startswith(label):
-                header = row.find(["th", "dt", "strong", "label"])
-                value = row.find(["td", "dd"])
-                if header is not None and value is not None and _normalize_text(_text(header)) == label:
-                    return _text(value)
                 return re.sub(r"^[^:：-]+[:：-]\s*", "", text, count=1).strip()
     return ""
 
@@ -518,6 +707,7 @@ def _build_component_from_values(values: dict[str, str], source_url: str) -> Sig
         workload_hours=_parse_workload(values.get("workload_hours", "")),
         syllabus=values.get("syllabus", ""),
         current_program=values.get("current_program", ""),
+        prerequisites=values.get("prerequisites") or None,
         theoretical_workload_hours=_parse_workload(values.get("theoretical_workload_hours", "")),
         practical_workload_hours=_parse_workload(values.get("practical_workload_hours", "")),
         details_processed=values.get("details_processed") == "true",
@@ -681,14 +871,24 @@ def parse_component_results(html: str, query: str, details_html: str | None = No
 
     values, source_url = result_row
     details = parse_sigaa_component_details(details_html or "", source_url)
+    for key in ["code", "name"]:
+        if details.get(key):
+            values[key] = details[key]
     if not values.get("workload_hours"):
         values["workload_hours"] = details.get("workload_hours", "")
     values["syllabus"] = details.get("syllabus", "")
     values["current_program"] = details.get("current_program", "")
+    values["prerequisites"] = details.get("prerequisites", "")
     values["theoretical_workload_hours"] = details.get("theoretical_workload_hours", "")
     values["practical_workload_hours"] = details.get("practical_workload_hours", "")
-    values["details_processed"] = "true" if details_processed else "false"
-    component = _build_component_from_values(values, source_url)
+    if not values.get("workload_hours"):
+        theoretical = _parse_workload(values.get("theoretical_workload_hours", ""))
+        practical = _parse_workload(values.get("practical_workload_hours", ""))
+        if theoretical is not None and practical is not None:
+            values["workload_hours"] = str(theoretical + practical)
+    has_detail_data = any(values.get(key) for key in ["syllabus", "current_program", "prerequisites", "theoretical_workload_hours", "practical_workload_hours"])
+    values["details_processed"] = "true" if details_processed and has_detail_data else "false"
+    component = _build_component_from_values(values, details.get("source_url") or source_url)
     if component is None:
         return _empty_response(
             "error",
@@ -738,9 +938,14 @@ def _search_once(session: requests.Session, normalized_query: str) -> SigaaCompo
     if basic.status != "found" or basic.component is None:
         return basic
     try:
-        details_html = fetch_component_details(session, basic.component.source_url, form_data.action_url)
-        return parse_component_results(response_html, normalized_query, details_html, details_processed=True)
-    except (requests.RequestException, SigaaSessionRedirectError):
+        details_html, detail_source_url = fetch_turma_component_details(session, normalized_query)
+        enriched = parse_component_results(response_html, normalized_query, details_html, details_processed=True)
+        if enriched.component is not None and enriched.component.details_processed:
+            enriched.component.source_url = detail_source_url
+            return enriched
+        basic.warnings.append("Dados básicos encontrados; o detalhe público não trouxe ementa ou carga horária. Revise ou preencha manualmente.")
+        return basic
+    except (requests.RequestException, SigaaSessionRedirectError, SigaaResponseTooLargeError, ValueError):
         basic.warnings.append("Dados básicos encontrados; o detalhe público não pôde ser carregado. Revise ou preencha manualmente.")
         return basic
 
