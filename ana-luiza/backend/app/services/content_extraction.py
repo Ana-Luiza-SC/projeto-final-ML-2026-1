@@ -202,7 +202,7 @@ def confirm_extraction_preview(discipline_id: str, preview_id: str, nodes: list[
                 pending.remove(node)
     except Exception:
         for record in reversed(created):
-            storage.CONTENT_NODES[discipline_id].pop(record["id"], None)
+            nodes = storage.CONTENT_NODES.get(discipline_id, {}); nodes.pop(record["id"], None); storage.CONTENT_NODES[discipline_id] = nodes
         raise
     storage.delete_content_extraction_preview(preview_id)
     logger.info("content_extraction_confirmed discipline_id=%s preview_id=%s node_count=%d", discipline_id, preview_id, len(created))

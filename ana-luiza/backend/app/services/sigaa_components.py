@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
+import time
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +12,8 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
@@ -24,6 +28,9 @@ SIGAA_ORIGIN = "https://sigaa.unb.br"
 SOURCE = "sigaa_public_components"
 USER_AGENT = "EstudaUnB/0.1 public-components-lookup"
 TIMEOUT_SECONDS = 6
+MIN_REQUEST_INTERVAL_SECONDS = 0.25
+_rate_lock = threading.Lock()
+_last_public_request = 0.0
 CACHE_FILE = Path(__file__).resolve().parents[1] / "cache" / "sigaa_components_cache.json"
 
 
@@ -707,7 +714,18 @@ def parse_sigaa_search_results(html: str, query: str) -> SigaaComponentSearchRes
 def _create_session() -> requests.Session:
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
+    retry = Retry(total=1, connect=1, read=0, status=1, backoff_factor=0.25, status_forcelist=(429, 502, 503, 504), allowed_methods=frozenset({"GET", "POST"}))
+    session.mount("https://", HTTPAdapter(max_retries=retry))
     return session
+
+
+def _respect_public_rate_limit() -> None:
+    global _last_public_request
+    with _rate_lock:
+        wait = MIN_REQUEST_INTERVAL_SECONDS - (time.monotonic() - _last_public_request)
+        if wait > 0:
+            time.sleep(wait)
+        _last_public_request = time.monotonic()
 
 
 def _search_once(session: requests.Session, normalized_query: str) -> SigaaComponentSearchResponse:
@@ -745,6 +763,8 @@ def search_sigaa_component(
     for attempt in range(attempts):
         current_session = _create_session() if owns_session else session
         try:
+            if owns_session:
+                _respect_public_rate_limit()
             response = _search_once(current_session, normalized_query)
             break
         except SigaaSessionRedirectError:
@@ -794,4 +814,7 @@ def search_sigaa_component(
 
     if response.status == "found":
         set_cached_component(normalized_query, response)
+        if response.component is not None:
+            from app import storage
+            storage.upsert_catalog_component(response.component.model_dump())
     return response

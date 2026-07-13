@@ -90,9 +90,18 @@ Depois clique em `Gerar recomendação de estudo`. O backend funciona sem `GOOGL
 
 ## Limitações
 
-- Sem login.
-- Sem calendário.
-- Sem upload ou parsing de PDF.
+- Autenticação restrita ao usuário configurado no backend; cadastro público desabilitado.
+- Sem calendário nesta etapa.
+- Importações de documentos sempre exigem revisão humana antes da persistência.
 - Agente disponível via backend; sem `GOOGLE_API_KEY`, usa fallback por regras.
 - Consulta SIGAA limitada à fonte pública de componentes curriculares, via backend.
-- Dados do backend ficam em memória nesta etapa.
+- Dados acadêmicos persistem no banco configurado por `DATABASE_URL`.
+
+## Rotas públicas e sessão
+
+- `/` é a landing page pública do EstudaUnB.
+- `/login` autentica com o usuário de demonstração configurado no backend.
+- `/register` valida o formulário somente no navegador e informa que o cadastro público está indisponível; não chama API nem persiste credenciais.
+- `/app`, `/disciplines`, `/study-plan` e `/matricula-import` são rotas protegidas.
+
+Use `ALLOW_REGISTRATION=false` no backend. O usuário de demonstração é criado por `EMAIL_TESTE` e `SENHA_TESTE`; não inclua os valores reais em código, HTML, logs ou documentação.

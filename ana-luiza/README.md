@@ -83,11 +83,23 @@ Endpoint no Swagger:
 ```bash
 cd backend && pytest
 cd frontend && npm run build
-docker compose config --no-env-resolution
+docker compose config --quiet
 ```
 
 ## Escopo atual
 
-- Backend FastAPI em memória.
-- Frontend React mínimo para cadastro de disciplinas, avaliações, faltas e simulação.
-- Sem login, upload/parsing de PDF, calendário ou SQLite nesta fatia. Integração SIGAA limitada à fonte pública de componentes curriculares.
+- Backend FastAPI com persistência SQLAlchemy/SQLite e migrações Alembic.
+- Frontend React com landing pública, autenticação restrita, disciplinas, avaliações, conteúdos, frequência, agente e planejamento.
+- Sem cadastro público, recuperação de senha, login social ou calendário nesta etapa. Integração SIGAA limitada à fonte pública de componentes curriculares.
+
+## Acesso público e autenticação
+
+Rotas públicas do frontend:
+
+- `/`: apresentação do produto;
+- `/login`: entrada no ambiente restrito;
+- `/register`: formulário demonstrativo, sem envio ou criação de conta.
+
+As telas de disciplinas, conteúdos, importação e planejamento exigem autenticação. Ao abrir uma rota protegida sem sessão, o frontend encaminha para `/login` e preserva o destino para retorno após um login válido. O logout remove o token local e retorna à página pública.
+
+O cadastro público permanece desabilitado com `ALLOW_REGISTRATION=false`. O backend cria ou atualiza o usuário de demonstração a partir de `EMAIL_TESTE` e `SENHA_TESTE`; os valores reais devem existir somente no ambiente e ser informados pelo responsável, nunca publicados no frontend ou no repositório.

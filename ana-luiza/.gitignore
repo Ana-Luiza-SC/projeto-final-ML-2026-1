@@ -17,3 +17,18 @@ backend/app/data/
 venv/
 .venv/
 backend/venv/
+
+# Banco SQLite local do EstudaUnB — artefato de execução
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
+backend/data/*-wal
+backend/data/*-shm
+backend/data/*-journal
+!backend/data/.gitkeep
+
+# Caminho local legado anterior à spec012
+backend/estudaunb.db
+backend/estudaunb.db-wal
+backend/estudaunb.db-shm
+backend/estudaunb.db-journal

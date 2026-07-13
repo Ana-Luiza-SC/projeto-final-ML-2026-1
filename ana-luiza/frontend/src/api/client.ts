@@ -30,7 +30,13 @@ export function getApiBaseUrl() {
   return API_BASE_URL;
 }
 
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem("estudaunb_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function friendlyError(status: number, detail: unknown): string {
+  if (status === 401) return typeof detail === "string" ? detail : "Faça login novamente.";
   if (status === 404) return typeof detail === "string" ? detail : "Recurso não encontrado.";
   if (status === 409) return typeof detail === "string" ? detail : "A operação conflita com a hierarquia atual.";
   if (status === 400 || status === 422) {
@@ -46,7 +52,7 @@ function friendlyError(status: number, detail: unknown): string {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
-      headers: { "Content-Type": "application/json", ...options.headers },
+      headers: { "Content-Type": "application/json", ...authHeaders(), ...options.headers },
       ...options,
     });
 
@@ -76,6 +82,7 @@ async function requestForm<T>(path: string, formData: FormData): Promise<T> {
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method: "POST",
+      headers: authHeaders(),
       body: formData,
     });
 
@@ -266,3 +273,16 @@ export function getAssessmentContentAssociation(disciplineId: string, assessment
 export function setAssessmentContentAssociation(disciplineId: string, assessmentId: string, selections: import("../types").AssessmentContentSelection[]) { return request<import("../types").AssessmentContentAssociation>(`/api/disciplines/${disciplineId}/assessments/${assessmentId}/content-associations`, { method: "PUT", body: JSON.stringify({ selections }) }); }
 export function previewContentExtraction(disciplineId: string) { return request<import("../types").ContentExtractionPreview>(`/api/disciplines/${disciplineId}/contents/extract-preview`, { method: "POST" }); }
 export function confirmContentExtraction(disciplineId: string, previewId: string, draftNodes: import("../types").ContentDraftNode[]) { return request<import("../types").ContentExtractionConfirmation>(`/api/disciplines/${disciplineId}/contents/confirm-preview`, { method: "POST", body: JSON.stringify({ preview_id: previewId, draft_nodes: draftNodes }) }); }
+
+export type AuthUser = { id: string; email: string };
+export type LoginResponse = { access_token: string; token_type: "bearer"; user: AuthUser };
+export type ComplexityAnalysis = { estimated_level: "low" | "medium" | "high"; confidence: number; factors: string[]; syllabus_evidence: string[]; mode: "llm" | "fallback"; model_or_rule_version: string; analyzed_at: string; warnings: string[] };
+export async function login(email: string, password: string) {
+  const result = await request<LoginResponse>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+  localStorage.setItem("estudaunb_token", result.access_token);
+  return result.user;
+}
+export function getMe() { return request<AuthUser>("/api/auth/me"); }
+export function logout() { localStorage.removeItem("estudaunb_token"); }
+export function analyzeDisciplineComplexity(id: string, reanalyze = false) { return request<ComplexityAnalysis>(`/api/disciplines/${id}/complexity-analysis?reanalyze=${reanalyze}`, { method: "POST" }); }
+export function refreshDisciplineCatalog(id: string) { return request<Discipline>(`/api/disciplines/${id}/catalog-refresh`, { method: "POST" }); }

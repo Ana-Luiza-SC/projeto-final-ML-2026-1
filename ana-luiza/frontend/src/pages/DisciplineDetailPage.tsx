@@ -29,6 +29,7 @@ import { PendingTopicsForm } from "../components/PendingTopicsForm";
 import { SigaaComponentPanel } from "../components/SigaaComponentPanel";
 import { StudyRecommendationPanel } from "../components/StudyRecommendationPanel";
 import { ContentTreePanel } from "../components/ContentTreePanel";
+import { CatalogOverview } from "../components/CatalogOverview";
 import type {
   Absence,
   AbsencePayload,
@@ -452,6 +453,7 @@ export function DisciplineDetailPage({ disciplineId, onBack }: Props) {
             <div><p className="eyebrow">Próxima ação</p><h2>{nextAssessment ? `Prepare-se para ${nextAssessment.name}` : "Organize sua próxima etapa"}</h2><p>{nextAssessment?.date ? `Avaliação prevista para ${nextAssessment.date}.` : "Converse com o assistente usando os dados cadastrados."}</p></div>
             <button type="button" onClick={() => setActiveTab("recommendations")}>Conversar com o assistente</button>
           </section>
+          <CatalogOverview discipline={discipline} onRefresh={setDiscipline} />
           <section className="overview-cards">
             <div><span>Próxima avaliação</span><strong>{nextAssessment ? `${nextAssessment.name} · ${nextAssessment.date ?? "Sem data"}` : "Não informada"}</strong></div>
             <div><span>Desempenho</span><strong>{simulation?.partial_average == null ? "Não calculado" : `Média ${numberText(simulation.partial_average)}`}</strong></div>

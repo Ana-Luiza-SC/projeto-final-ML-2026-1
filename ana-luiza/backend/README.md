@@ -184,3 +184,11 @@ A frequência mínima é 75%. Faltas acima de 25% indicam risco grave ou reprova
 - Consulta SIGAA limitada à fonte pública de componentes curriculares; sem área autenticada e sem scraping massivo.
 - Sem parsing real de PDF.
 - Sem calendário.
+
+## Persistência, autenticação e catálogo local
+
+Os dados acadêmicos usam SQLAlchemy e `DATABASE_URL` (resolvido para `backend/data/estudaunb.db` por padrão, independentemente do diretório de execução). Execute `alembic upgrade head` antes da API. O Compose usa um volume SQLite persistente; PostgreSQL pode ser selecionado por URL sem alterar os serviços.
+
+O cadastro público não existe no MVP. Na inicialização, `EMAIL_TESTE` e `SENHA_TESTE` criam ou atualizam idempotentemente o usuário restrito; `AUTH_SECRET` assina sessões HMAC. Senhas usam PBKDF2-SHA256 com salt e nunca são registradas.
+
+A busca pública do SIGAA mantém sessão JSF/ViewState, timeout, repetição limitada e intervalo entre consultas. Resultados enriquecidos são sanitizados e gravados com upsert em `catalog_components`; disciplinas do estudante apenas referenciam/copiam os metadados acadêmicos, sem apagar avaliações ou conteúdos. `POST /api/disciplines/{id}/complexity-analysis` analisa somente a disciplina solicitada e persiste o resultado, com fallback auditável.

@@ -44,32 +44,38 @@ def create_node(discipline_id: str, payload: dict[str, Any]) -> dict:
     now = datetime.now(timezone.utc)
     node = {"id": str(uuid4()), "discipline_id": discipline_id, **payload, "created_at": now}
     nodes[node["id"]] = node
+    storage.CONTENT_NODES[discipline_id] = nodes
     return node
 
 def update_node(discipline_id: str, node_id: str, payload: dict[str, Any]) -> dict:
-    node = get_node(discipline_id, node_id)
+    nodes = _nodes(discipline_id)
+    node = nodes.get(node_id)
+    if not node: raise ContentMapNotFound("Conteúdo não encontrado nesta disciplina.")
     parent_id = payload.get("parent_id", node.get("parent_id"))
     if parent_id == node_id: raise ContentMapConflict("Um conteúdo não pode ser seu próprio pai.")
     if parent_id:
-        get_node(discipline_id, parent_id)
+        if parent_id not in nodes: raise ContentMapNotFound("Conteúdo pai não encontrado nesta disciplina.")
         if parent_id in {item["id"] for item in descendants(discipline_id, node_id)}:
             raise ContentMapConflict("A movimentação criaria um ciclo.")
-    if _depth(discipline_id, parent_id) > MAX_DEPTH: raise ContentMapConflict(f"Profundidade máxima de {MAX_DEPTH} níveis excedida.")
-    old = dict(node)
-    node.update(payload)
-    try:
-        for child in descendants(discipline_id, node_id):
-            if _depth(discipline_id, child.get("parent_id")) > MAX_DEPTH: raise ContentMapConflict(f"Profundidade máxima de {MAX_DEPTH} níveis excedida.")
-    except ContentMapError:
-        node.clear(); node.update(old); raise
-    return node
+    candidate = {**node, **payload}
+    candidate_nodes = {**nodes, node_id: candidate}
+    def local_depth(item_id: str) -> int:
+        depth, current, seen = 1, candidate_nodes[item_id].get("parent_id"), set()
+        while current:
+            if current in seen: raise ContentMapConflict("Ciclo detectado na hierarquia.")
+            seen.add(current); depth += 1; current = candidate_nodes[current].get("parent_id")
+        return depth
+    if any(local_depth(item_id) > MAX_DEPTH for item_id in candidate_nodes):
+        raise ContentMapConflict(f"Profundidade máxima de {MAX_DEPTH} níveis excedida.")
+    storage.CONTENT_NODES[discipline_id] = candidate_nodes
+    return candidate
 
 def delete_node(discipline_id: str, node_id: str) -> None:
     get_node(discipline_id, node_id)
     if descendants(discipline_id, node_id): raise ContentMapConflict("Exclusão bloqueada: remova primeiro os conteúdos descendentes.")
     if any(any(selection["content_node_id"] == node_id for selection in selections) for selections in storage.ASSESSMENT_CONTENT_LINKS.values()):
         raise ContentMapConflict("Exclusão bloqueada: remova primeiro a associação com avaliações.")
-    del _nodes(discipline_id)[node_id]
+    nodes = _nodes(discipline_id); del nodes[node_id]; storage.CONTENT_NODES[discipline_id] = nodes
 
 def tree(discipline_id: str) -> list[dict]:
     nodes = _nodes(discipline_id)

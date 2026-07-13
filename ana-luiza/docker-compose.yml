@@ -12,6 +12,13 @@ services:
       LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash}
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-8}
       LLM_FALLBACK_ENABLED: ${LLM_FALLBACK_ENABLED:-true}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/estudaunb.db}
+      AUTH_SECRET: ${AUTH_SECRET:-local-development-change-me}
+      EMAIL_TESTE: ${EMAIL_TESTE:-teste@example.invalid}
+      SENHA_TESTE: ${SENHA_TESTE:-altere-esta-senha}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+    volumes:
+      - estudaunb_data:/data
 
   frontend:
     build:
@@ -22,3 +29,7 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+
+
+volumes:
+  estudaunb_data:

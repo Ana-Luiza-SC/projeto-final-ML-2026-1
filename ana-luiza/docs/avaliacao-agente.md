@@ -80,3 +80,7 @@ Sem chave, em timeout, indisponibilidade, JSON inválido ou evidência não enco
 As respostas de recomendação e do chat diferenciam `llm` de `deterministic_fallback` e categorizam ausência de chave, provedor não suportado, timeout, indisponibilidade e resposta inválida. A interface traduz essas categorias sem exibir erro técnico. Testes com mocks comprovam chamada configurada, contexto hierárquico completo, timeout, validação e logs sem prompt ou chave.
 
 O planejador materializa os dias em datas de `America/Sao_Paulo` e vincula uma atividade a uma avaliação somente quando `scheduled_date < assessment_date`. A explicação recebe o plano já validado e não pode mudar a estrutura. O cenário de domingo com provas terça e quinta e disponibilidade segunda, quarta e sexta reserva segunda para a primeira prova, quarta para a segunda e não rotula sexta como preparação para nenhuma delas.
+
+## Complexidade acadêmica sob demanda
+
+A complexidade é apresentada como estimativa, nunca como propriedade objetiva. A análise é acionada para uma disciplina selecionada, usa no máximo a ementa pública confirmada, valida nível, confiança e evidências literais, e persiste modo/modelo/data. Resposta inválida, timeout ou ausência de provedor usa a regra local versionada. Não há análise em lote na sincronização do catálogo e nenhuma inferência vira pré-requisito ou conteúdo de avaliação.

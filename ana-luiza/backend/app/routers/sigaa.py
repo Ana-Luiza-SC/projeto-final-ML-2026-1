@@ -27,7 +27,10 @@ VALIDATION_RESPONSE = {"description": "Entrada inválida."}
 def search_component(
     query: str = Query(..., min_length=1, description="Código ou nome do componente curricular.")
 ) -> SigaaComponentSearchResponse:
-    return search_sigaa_component(query)
+    response = search_sigaa_component(query)
+    if response.status == "found" and response.component is not None:
+        storage.upsert_catalog_component(response.component.model_dump())
+    return response
 
 
 @router.patch(
