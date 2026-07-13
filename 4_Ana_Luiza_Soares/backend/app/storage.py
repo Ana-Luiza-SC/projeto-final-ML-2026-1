@@ -1,6 +1,6 @@
 from __future__ import annotations
 from collections.abc import MutableMapping, Iterator
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 from bs4 import BeautifulSoup
 from sqlalchemy import delete, select
@@ -26,6 +26,7 @@ IMPORT_PREVIEWS: dict[str, dict] = {}
 COURSE_PLAN_PREVIEWS: dict[str, dict] = {}
 CONTENT_EXTRACTION_PREVIEWS: dict[str, dict] = {}
 EVENT_EXTRACTION_PREVIEWS: dict[str, dict] = {}
+STUDY_PLAN_PREVIEWS: dict[str, dict] = {}
 
 
 def utc_now():
@@ -512,13 +513,111 @@ def _with_discipline_meta(event: dict) -> dict:
     return event
 
 
+def _parse_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    raw = str(value)
+    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+
+
+def _event_duration(event: dict) -> timedelta:
+    start = _parse_datetime(event.get("start_at"))
+    end = _parse_datetime(event.get("end_at"))
+    if start and end and end > start:
+        return end - start
+    return timedelta(0)
+
+
+_DAY_TO_INDEX = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+
+
+def _add_months(value: datetime, months: int) -> datetime:
+    month = value.month - 1 + months
+    year = value.year + month // 12
+    month = month % 12 + 1
+    days = [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    return value.replace(year=year, month=month, day=min(value.day, days[month - 1]))
+
+
+def _recurrence_occurrence_starts(event: dict, range_start: datetime | None, range_end: datetime | None):
+    rule = event.get("recurrence") or {}
+    frequency = rule.get("frequency") or "none"
+    start = _parse_datetime(event.get("start_at"))
+    if frequency == "none" or start is None:
+        return []
+    ends = rule.get("ends") or {}
+    until = ends.get("until")
+    until_date = datetime.fromisoformat(str(until) + "T23:59:59-03:00") if until else None
+    count_limit = ends.get("count") if ends.get("mode") == "after_count" else None
+    hard_limit = min(int(count_limit or 500), 500)
+    starts = []
+    current = start
+    produced = 0
+    interval = int(rule.get("interval") or 1)
+    if frequency == "biweekly":
+        frequency = "weekly"
+        interval = 2
+    weekdays = [_DAY_TO_INDEX[d] for d in rule.get("weekdays") or [] if d in _DAY_TO_INDEX]
+
+    while produced < hard_limit:
+        candidates = []
+        if frequency in {"weekly", "custom_weekly"} and weekdays:
+            week_start = current - timedelta(days=current.weekday())
+            for weekday in weekdays:
+                candidate = week_start + timedelta(days=weekday)
+                candidate = candidate.replace(hour=start.hour, minute=start.minute, second=start.second, microsecond=start.microsecond)
+                if candidate >= start:
+                    candidates.append(candidate)
+            next_current = current + timedelta(days=7 * interval)
+        elif frequency == "daily":
+            candidates = [current]
+            next_current = current + timedelta(days=interval)
+        elif frequency == "monthly":
+            candidates = [current]
+            next_current = _add_months(current, interval)
+        elif frequency == "yearly":
+            candidates = [current]
+            next_current = current.replace(year=current.year + interval)
+        else:
+            return []
+
+        for candidate in sorted(candidates):
+            if candidate < start:
+                continue
+            if until_date and candidate > until_date:
+                return starts
+            produced += 1
+            if count_limit and produced > int(count_limit):
+                return starts
+            if range_end and candidate > range_end:
+                if frequency in {"daily", "monthly", "yearly"}:
+                    return starts
+                continue
+            if range_start and candidate < range_start:
+                continue
+            starts.append(candidate)
+        current = next_current
+        if range_end and current > range_end + timedelta(days=370):
+            return starts
+    return starts
+
+
+def _occurrence_event(event: dict, occurrence_start: datetime) -> dict:
+    duration = _event_duration(event)
+    occurrence = {**event}
+    occurrence["recurrence_series_id"] = event["id"]
+    occurrence["occurrence_date"] = occurrence_start.date().isoformat()
+    occurrence["occurrence_id"] = f'{event["id"]}:{occurrence_start.date().isoformat()}'
+    occurrence["start_at"] = occurrence_start.isoformat()
+    if duration:
+        occurrence["end_at"] = (occurrence_start + duration).isoformat()
+    return occurrence
+
+
 def list_events(start_at=None, end_at=None, discipline_id=None, event_type=None, status=None):
-    def parse(value):
-        if value is None:
-            return None
-        raw = value.isoformat() if hasattr(value, "isoformat") else str(value)
-        return raw
-    start_raw, end_raw = parse(start_at), parse(end_at)
+    range_start, range_end = _parse_datetime(start_at), _parse_datetime(end_at)
     items = []
     for event in EVENTS.values():
         if discipline_id and str(event.get("discipline_id")) != str(discipline_id):
@@ -527,10 +626,15 @@ def list_events(start_at=None, end_at=None, discipline_id=None, event_type=None,
             continue
         if status and event.get("status") != status:
             continue
-        event_start = str(event.get("start_at"))
-        if start_raw and event_start < start_raw:
+        recurrence = (event.get("recurrence") or {}).get("frequency")
+        if recurrence and recurrence != "none":
+            for occurrence_start in _recurrence_occurrence_starts(event, range_start, range_end):
+                items.append(_with_discipline_meta(_occurrence_event(event, occurrence_start)))
             continue
-        if end_raw and event_start > end_raw:
+        event_start = _parse_datetime(event.get("start_at"))
+        if range_start and event_start and event_start < range_start:
+            continue
+        if range_end and event_start and event_start > range_end:
             continue
         items.append(_with_discipline_meta(event))
     return sorted(items, key=lambda item: (str(item.get("start_at")), item.get("title") or ""))
@@ -639,3 +743,17 @@ def get_event_extraction_preview(preview_id):
 
 def delete_event_extraction_preview(preview_id):
     EVENT_EXTRACTION_PREVIEWS.pop(str(preview_id), None)
+
+
+
+def save_study_plan_preview(preview: dict) -> dict:
+    STUDY_PLAN_PREVIEWS[str(preview["study_plan_id"])] = preview
+    return preview
+
+
+def get_study_plan_preview(study_plan_id: str) -> dict | None:
+    return STUDY_PLAN_PREVIEWS.get(str(study_plan_id))
+
+
+def delete_study_plan_preview(study_plan_id: str) -> None:
+    STUDY_PLAN_PREVIEWS.pop(str(study_plan_id), None)

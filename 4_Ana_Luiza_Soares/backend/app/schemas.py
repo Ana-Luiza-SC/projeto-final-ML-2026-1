@@ -399,6 +399,106 @@ class StudyPlanPriority(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class WeeklyAvailabilityWindow(BaseModel):
+    weekday: StudyPlanDay
+    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    available: bool = True
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def validate_time_format(cls, value: str) -> str:
+        _parse_hhmm(value)
+        return value
+
+    @model_validator(mode="after")
+    def validate_time_order(self) -> "WeeklyAvailabilityWindow":
+        if _minutes(self.start_time) >= _minutes(self.end_time):
+            raise ValueError("Inicio da janela deve ser menor que o fim.")
+        return self
+
+
+class WeeklyAvailabilityRequest(BaseModel):
+    week_start: Date
+    timezone: Literal["America/Sao_Paulo"] = "America/Sao_Paulo"
+    windows: list[WeeklyAvailabilityWindow] = Field(..., min_length=1, max_length=28)
+
+    model_config = {"extra": "forbid"}
+
+
+class AvailabilitySummaryResponse(BaseModel):
+    timezone: Literal["America/Sao_Paulo"] = "America/Sao_Paulo"
+    daily_totals: dict[StudyPlanDay, int]
+    weekly_total_minutes: int
+    normalized_windows: list[WeeklyAvailabilityWindow]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class WeeklyPlanPreviewRequest(WeeklyAvailabilityRequest):
+    excluded_discipline_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    objective_text: str | None = Field(default=None, max_length=500)
+
+
+class WeeklyPriorityEvidence(BaseModel):
+    source_type: Literal["assessment", "content", "discipline", "calendar", "simulation"]
+    source_id: str | None = None
+    summary: str
+
+
+class WeeklyPriorityResult(BaseModel):
+    discipline_id: UUID
+    discipline_code: str | None = None
+    discipline_name: str
+    content_id: UUID | None = None
+    assessment_id: UUID | None = None
+    assessment_name: str | None = None
+    deadline_at: datetime | None = None
+    priority_score: int = Field(..., ge=0, le=100)
+    priority_band: Literal["low", "medium", "high"]
+    evidence_used: list[WeeklyPriorityEvidence] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    reason: str
+
+
+class PlannedStudyBlockPreview(BaseModel):
+    temporary_id: str
+    discipline_id: UUID
+    discipline_code: str | None = None
+    discipline_name: str
+    content_id: UUID | None = None
+    assessment_id: UUID | None = None
+    title: str
+    reason: str
+    priority_score: int = Field(..., ge=0, le=100)
+    priority_band: Literal["low", "medium", "high"]
+    start_at: datetime
+    end_at: datetime
+    state: Literal["planned"] = "planned"
+
+
+class WeeklyPlanPreviewResponse(BaseModel):
+    study_plan_id: UUID
+    week_start: Date
+    timezone: Literal["America/Sao_Paulo"]
+    availability: AvailabilitySummaryResponse
+    ranked_priorities: list[WeeklyPriorityResult]
+    planned_blocks: list[PlannedStudyBlockPreview]
+    unallocated_priorities: list[WeeklyPriorityResult] = Field(default_factory=list)
+    conflicts: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    algorithm_version: str
+    generated_at: datetime
+
+
+class WeeklyPlanConfirmResponse(BaseModel):
+    study_plan_id: UUID
+    created_events: list["AcademicEventRead"]
+    skipped_blocks: list[dict[str, str]] = Field(default_factory=list)
+    created_count: int = Field(..., ge=0)
+
+
 class StudyPlanRequest(BaseModel):
     discipline_ids: list[UUID] = Field(..., min_length=1, max_length=20)
     availability: StudyPlanAvailability
@@ -714,9 +814,55 @@ class MatriculaImportConfirmResponse(BaseModel):
     request_id: str
 
 
-CalendarEventType = Literal["exam", "assignment", "presentation", "activity", "deadline", "other"]
-CalendarEventSource = Literal["manual", "assessment", "course_plan", "system"]
+CalendarEventType = Literal["exam", "assignment", "presentation", "activity", "deadline", "study_block", "other"]
+CalendarEventSource = Literal["manual", "assessment", "course_plan", "study_plan", "system"]
 CalendarEventStatus = Literal["draft", "confirmed", "cancelled", "completed"]
+RecurrenceFrequency = Literal["none", "daily", "weekly", "biweekly", "monthly", "yearly", "custom_weekly"]
+RecurrenceEndMode = Literal["never", "on_date", "after_count"]
+
+
+class RecurrenceEnd(BaseModel):
+    mode: RecurrenceEndMode = "never"
+    until: Date | None = None
+    count: int | None = Field(default=None, ge=1, le=500)
+
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def validate_end(self) -> "RecurrenceEnd":
+        if self.mode == "on_date" and self.until is None:
+            raise ValueError("Data final e obrigatoria para recorrencia com termino por data.")
+        if self.mode == "after_count" and self.count is None:
+            raise ValueError("Quantidade de ocorrencias e obrigatoria para recorrencia por contagem.")
+        return self
+
+
+class RecurrenceRule(BaseModel):
+    frequency: RecurrenceFrequency = "none"
+    interval: int = Field(default=1, ge=1, le=12)
+    weekdays: list[StudyPlanDay] = Field(default_factory=list, max_length=7)
+    ends: RecurrenceEnd = Field(default_factory=RecurrenceEnd)
+    rrule: str | None = None
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("weekdays")
+    @classmethod
+    def validate_unique_weekdays(cls, value: list[StudyPlanDay]) -> list[StudyPlanDay]:
+        if len(value) != len(set(value)):
+            raise ValueError("Dias da recorrencia nao podem se repetir.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_rule(self) -> "RecurrenceRule":
+        if self.frequency in {"weekly", "biweekly", "custom_weekly"} and not self.weekdays:
+            raise ValueError("Recorrencia semanal exige ao menos um dia da semana.")
+        if self.frequency == "biweekly":
+            self.interval = 2
+        if self.frequency == "none":
+            self.weekdays = []
+            self.interval = 1
+        return self
 
 
 def _sanitize_calendar_text(value: str | None) -> str | None:
@@ -746,6 +892,14 @@ class AcademicEventBase(BaseModel):
     source_evidence: str | None = Field(default=None, max_length=500)
     extraction_confidence: float | None = Field(default=None, ge=0, le=1)
     source_fingerprint: str | None = Field(default=None, max_length=180)
+    recurrence: RecurrenceRule | None = None
+    study_plan_id: UUID | None = None
+    content_id: UUID | None = None
+    priority_score: int | None = Field(default=None, ge=0, le=100)
+    priority_band: Literal["low", "medium", "high"] | None = None
+    priority_reason: str | None = Field(default=None, max_length=500)
+    algorithm_version: str | None = Field(default=None, max_length=80)
+    generated_at: datetime | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -786,6 +940,7 @@ class AcademicEventUpdate(BaseModel):
     timezone: str | None = None
     weight: float | None = Field(default=None, gt=0, le=100)
     status: CalendarEventStatus | None = None
+    recurrence: RecurrenceRule | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -801,6 +956,9 @@ class AcademicEventRead(AcademicEventBase):
     updated_at: datetime
     discipline_code: str | None = None
     discipline_name: str | None = None
+    recurrence_series_id: UUID | None = None
+    occurrence_id: str | None = None
+    occurrence_date: Date | None = None
 
 
 class CalendarDraftEvent(BaseModel):

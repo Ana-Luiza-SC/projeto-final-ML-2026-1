@@ -3,10 +3,19 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app import storage
-from app.schemas import StudyPlanRequest, StudyPlanResponse
+from app.schemas import (
+    AvailabilitySummaryResponse,
+    StudyPlanRequest,
+    StudyPlanResponse,
+    WeeklyAvailabilityRequest,
+    WeeklyPlanConfirmResponse,
+    WeeklyPlanPreviewRequest,
+    WeeklyPlanPreviewResponse,
+)
 from app.services.academic_calculator import calculate_grade_simulation
 from app.services.content_map import agent_content_context
 from app.services.study_plan_agent import StudyPlanInputError, StudyPlanOutputError, generate_study_plan
+from app.services.weekly_planning import WeeklyPlanningError, availability_summary, build_weekly_preview, confirm_weekly_preview
 
 router = APIRouter(prefix="/api/study-plans", tags=["study-plans"])
 NOT_FOUND_RESPONSE = {"description": "Disciplina não encontrada."}
@@ -27,6 +36,33 @@ def _effective_weight(assessment: dict):
     if group is not None and internal is not None:
         return group * internal
     return _normalized_weight(assessment.get("weight"))
+
+
+
+
+@router.post("/availability/summary", response_model=AvailabilitySummaryResponse)
+def summarize_availability(payload: WeeklyAvailabilityRequest) -> AvailabilitySummaryResponse:
+    try:
+        return availability_summary(payload)
+    except WeeklyPlanningError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/weekly-preview", response_model=WeeklyPlanPreviewResponse)
+def weekly_preview(payload: WeeklyPlanPreviewRequest) -> WeeklyPlanPreviewResponse:
+    try:
+        return build_weekly_preview(payload)
+    except WeeklyPlanningError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{study_plan_id}/confirm", response_model=WeeklyPlanConfirmResponse)
+def confirm_weekly_plan(study_plan_id: str) -> WeeklyPlanConfirmResponse:
+    try:
+        created, skipped = confirm_weekly_preview(study_plan_id)
+        return {"study_plan_id": study_plan_id, "created_events": created, "skipped_blocks": skipped, "created_count": len(created)}
+    except WeeklyPlanningError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post(
