@@ -48,8 +48,12 @@ def confirm_course_plan(discipline_id: UUID, payload: CoursePlanConfirmRequest):
         raise HTTPException(404, "Pré-visualização expirada ou inexistente.")
     if any(assessment.status == "requires_review" for assessment in payload.data.assessments):
         raise HTTPException(422, "Revise avaliações incertas antes de confirmar o plano de ensino.")
+    existing_assessments = storage.list_assessments(str(discipline_id))
+    for item in existing_assessments:
+        if item.get("source") == "course_plan":
+            storage.cancel_assessment_event(item["id"])
     storage.ASSESSMENTS[str(discipline_id)] = [
-        item for item in storage.list_assessments(str(discipline_id)) if item.get("source") != "course_plan"
+        item for item in existing_assessments if item.get("source") != "course_plan"
     ]
     record = storage.save_course_plan(str(discipline_id), payload.data.model_dump(mode="json"))
     for assessment in payload.data.assessments:

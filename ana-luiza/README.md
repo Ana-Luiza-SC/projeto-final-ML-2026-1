@@ -1,24 +1,81 @@
 # EstudaUnB
 
-Plataforma MVP para estudantes da UnB organizarem disciplinas, avaliações, faltas e simulações acadêmicas por menção/frequência.
+EstudaUnB é um MVP para estudantes da Universidade de Brasília organizarem disciplinas, conteúdos, avaliações, faltas, calendário acadêmico e planejamento semanal de estudos. O projeto demonstra o ciclo agente → API → produto com guardrails, fallback determinístico e dados auditáveis.
 
-## Rodar backend
+## Produto
+
+Problema: estudantes precisam transformar PDFs, planos de ensino, avaliações e conteúdos em um plano de estudo viável, respeitando datas reais e regras acadêmicas da UnB.
+
+Stakeholders: estudante, docente/orientador da disciplina de IA/ML e avaliadores do trabalho.
+
+Funcionalidades principais:
+
+- autenticação com usuário de demonstração por variáveis de ambiente;
+- cadastro manual de disciplinas;
+- importação revisada de atestado de matrícula em PDF;
+- consulta opcional a componentes públicos do SIGAA;
+- plano de ensino confirmado com avaliações;
+- conteúdos hierárquicos e associações com avaliações;
+- cálculo determinístico de nota, menção, frequência e risco;
+- calendário acadêmico mensal e agenda semanal;
+- agente de recomendação e explicação com fallback.
+
+Fluxo agente → API → produto:
+
+```mermaid
+flowchart LR
+    U[Estudante] --> FE[Frontend React/Vite]
+    FE --> API[Backend FastAPI]
+    API --> DB[(SQLite local ou PostgreSQL)]
+    API --> Calc[Cálculos determinísticos]
+    API --> Agent[Agente LLM opcional]
+    API --> Fallback[Fallback por regras]
+    Calc --> API
+    Agent --> Guardrails[Validação e guardrails]
+    Fallback --> Guardrails
+    Guardrails --> API
+    API --> FE
+```
+
+## Arquitetura
+
+- Frontend: React + Vite + TypeScript, SPA com rotas públicas e protegidas.
+- Backend: FastAPI, Pydantic, SQLAlchemy e Alembic.
+- Banco: SQLite em desenvolvimento por padrão; PostgreSQL em produção via `DATABASE_URL`.
+- Agente: Google/Gemini opcional; sem chave ou com erro usa fallback determinístico.
+- Scraper: somente páginas públicas do SIGAA/UnB para componentes curriculares.
+- Guardrails: validação de schema, evidência textual, isolamento por usuário, sem login no SIGAA, sem armazenar PDF bruto por padrão.
+- Fallback: cadastro manual, parser local, regras determinísticas e mensagens amigáveis.
+
+## Execução local
+
+Requisitos: Python 3.12, Node 22, Docker opcional.
+
+Copie `.env.example` para `.env` e ajuste localmente. Não commite `.env`.
+
+Variáveis principais:
+
+- `DATABASE_URL`: `sqlite:///./data/estudaunb.db` local ou URL PostgreSQL/Neon em produção;
+- `AUTH_SECRET`: segredo longo para tokens;
+- `EMAIL_TESTE` e `SENHA_TESTE`: credenciais do usuário de demonstração;
+- `ALLOW_REGISTRATION=false`: cadastro público permanece desabilitado;
+- `GOOGLE_API_KEY`: opcional;
+- `CORS_ORIGINS`: origens do frontend;
+- `VITE_API_URL`: URL pública do backend para o frontend.
+
+Backend sem Docker:
 
 ```bash
 cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head
+python scripts/seed_demo.py
 uvicorn app.main:app --reload
 ```
 
-API local: http://localhost:8000
-
-Swagger: http://localhost:8000/docs
-ReDoc: http://localhost:8000/redoc
-OpenAPI JSON: http://localhost:8000/openapi.json
-
-## Rodar frontend
+Frontend sem Docker:
 
 ```bash
 cd frontend
@@ -26,17 +83,7 @@ npm install
 npm run dev
 ```
 
-Frontend local: http://localhost:5173
-
-Para apontar para outra API, crie `frontend/.env` com:
-
-```bash
-VITE_API_BASE_URL=http://localhost:8000
-```
-
-## Rodar com Docker
-
-Para subir backend e frontend juntos:
+Docker Compose:
 
 ```bash
 docker compose up --build
@@ -47,59 +94,99 @@ URLs locais:
 - Frontend: http://localhost:5173
 - Backend health: http://localhost:8000/api/health
 - Swagger: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- OpenAPI JSON: http://localhost:8000/openapi.json
 
-O frontend em Docker é servido por nginx na porta `5173`. Durante o build, o Compose usa `VITE_API_BASE_URL=http://localhost:8000`, porque as chamadas HTTP são feitas pelo navegador fora da rede interna do Docker.
+## Scripts
 
-Para configurar variáveis locais, copie `.env.example` para `.env` e ajuste apenas no seu ambiente. Não commite `.env`, `.env.local` ou arquivos `*.key`.
-
-`GOOGLE_API_KEY` é opcional. Sem essa chave, ou se a chamada ao LLM falhar, o backend continua funcionando com fallback determinístico por regras.
-
-## Componentes curriculares do SIGAA
-
-O backend possui uma consulta best-effort à fonte pública de componentes curriculares do SIGAA/UnB:
-
-- Fonte pública: https://sigaa.unb.br/sigaa/public/componentes/busca_componentes.jsf
-- Busca: `GET /api/sigaa/components/search?query=FGA0315`
-- Associação à disciplina: `PATCH /api/disciplines/{id}/sigaa-component`
-
-A consulta usa cache local runtime e não depende de login. Se o SIGAA estiver indisponível, se a página JSF mudar ou se o componente não for encontrado, o sistema continua funcionando com o cadastro manual da disciplina. A integração não coleta dados de estudante, não usa páginas autenticadas, não consulta taxa de reprovação e não avalia professor.
-
-A busca segue semanticamente o link público de detalhes na mesma sessão para obter ementa e programa; falhas parciais preservam código e nome. O cache ignora registros antigos sem detalhe processado. Horários importados priorizam a tabela semanal e são exibidos de forma legível, mantendo o código compacto apenas para auditoria e revisão manual.
-
-## Agente de recomendação
-
-O agente usa Google/Gemini quando configurado com `GOOGLE_API_KEY`. Se a chave não existir, se o LLM falhar, se houver timeout ou se a resposta vier inválida, o backend usa fallback determinístico por regras.
-
-Crie apenas `.env.example` no repositório. Não commite `.env` real.
-
-Endpoint no Swagger:
-
-- `POST /api/agent/study-recommendation`
-
-## Validação
+Backend:
 
 ```bash
-cd backend && pytest
-cd frontend && npm run build
-docker compose config --quiet
+cd backend
+alembic upgrade head
+python scripts/seed_demo.py
+pytest
 ```
 
-## Escopo atual
+Frontend:
 
-- Backend FastAPI com persistência SQLAlchemy/SQLite e migrações Alembic.
-- Frontend React com landing pública, autenticação restrita, disciplinas, avaliações, conteúdos, frequência, agente e planejamento.
-- Sem cadastro público, recuperação de senha, login social ou calendário nesta etapa. Integração SIGAA limitada à fonte pública de componentes curriculares.
+```bash
+cd frontend
+npm run build
+```
 
-## Acesso público e autenticação
+Catálogo SIGAA: use `GET /api/sigaa/components/search?query=<codigo>` e `PATCH /api/disciplines/{id}/sigaa-component`.
 
-Rotas públicas do frontend:
+## Deploy
 
-- `/`: apresentação do produto;
-- `/login`: entrada no ambiente restrito;
-- `/register`: formulário demonstrativo, sem envio ou criação de conta.
+O repositório inclui `render.yaml` para separar:
 
-As telas de disciplinas, conteúdos, importação e planejamento exigem autenticação. Ao abrir uma rota protegida sem sessão, o frontend encaminha para `/login` e preserva o destino para retorno após um login válido. O logout remove o token local e retorna à página pública.
+- backend como Web Service Docker;
+- frontend como Static Site.
 
-O cadastro público permanece desabilitado com `ALLOW_REGISTRATION=false`. O backend cria ou atualiza o usuário de demonstração a partir de `EMAIL_TESTE` e `SENHA_TESTE`; os valores reais devem existir somente no ambiente e ser informados pelo responsável, nunca publicados no frontend ou no repositório.
+Banco recomendado: Neon ou PostgreSQL compatível, informado por `DATABASE_URL`.
+
+Backend no Render:
+
+- configurar `DATABASE_URL`, `AUTH_SECRET`, `EMAIL_TESTE`, `SENHA_TESTE`, `CORS_ORIGINS`;
+- opcionalmente configurar `GOOGLE_API_KEY`;
+- health check: `/api/health`;
+- startup executa `alembic upgrade head`;
+- porta usa `$PORT`.
+
+Frontend no Render:
+
+- configurar `VITE_API_URL` com a URL pública do backend;
+- build: `npm ci && npm run build`;
+- publish: `dist`;
+- fallback SPA: rewrite `/*` para `/index.html`.
+
+Limitações de serviços gratuitos: cold start, banco pode dormir, latência maior no primeiro acesso e limites de conexão.
+
+## Agente
+
+O backend calcula nota, menção, frequência, prazos e janelas de estudo deterministicamente. O agente pode explicar prioridades, adaptar linguagem, selecionar estratégias permitidas e relacionar evidências.
+
+Estratégias permitidas:
+
+- prática de recuperação;
+- prática distribuída;
+- intercalação;
+- exemplos concretos/resolvidos;
+- autoexplicação.
+
+Guardrails:
+
+- não inventar data, peso, nota, ementa ou professor;
+- não avaliar docente;
+- não afirmar aprovação final sem frequência conhecida;
+- não preparar sessão após a prova;
+- não exibir erro técnico cru ao usuário.
+
+Monitoramento mínimo registra latência, fallback, motivo do fallback, eventos extraídos/rejeitados, plano gerado e sessões rejeitadas por prazo, sem senha, token, chave ou documento integral.
+
+## Calendário
+
+Eventos persistidos em `academic_events` têm origem `manual`, `assessment`, `course_plan` ou `system`; estado `draft`, `confirmed`, `cancelled` ou `completed`; tipo `exam`, `assignment`, `presentation`, `activity`, `deadline` ou `other`.
+
+Regras principais:
+
+- avaliação datada cria/atualiza evento vinculado;
+- editar data, título ou peso da avaliação atualiza a projeção temporal;
+- excluir avaliação cancela o evento vinculado, sem apagar silenciosamente o histórico;
+- evento manual não é sobrescrito por avaliação;
+- plano confirmado gera apenas preview; persistência exige confirmação humana;
+- eventos e consultas são isolados por usuário autenticado;
+- timezone padrão: `America/Sao_Paulo`.
+
+A rota protegida `/calendar` mostra calendário mensal, filtros, criação manual, preview de extração e agenda semanal com eventos, sessões de estudo e pendências por falta de capacidade.
+
+## Planejamento temporal
+
+Datas são restrições rígidas no backend. Para conteúdos associados a avaliação/evento, o plano só pode usar sessões com `scheduled_date < assessment_date`. Eventos passados não geram preparação retroativa. Conteúdo sem capacidade antes do prazo aparece como pendente com explicação.
+
+## Limitações reais
+
+- Não há integração com Google Calendar, e-mail ou notificações.
+- Preview de extração de eventos usa dados estruturados do plano confirmado; sem plano confirmado, o sistema orienta o usuário e não salva nada.
+- O LLM é opcional; sem chave, a personalização usa fallback.
+- O frontend não possui testes automatizados extensos além de TypeScript/build.
+- O deploy real exige credenciais externas de Render/Neon e não é executado pelo repositório.

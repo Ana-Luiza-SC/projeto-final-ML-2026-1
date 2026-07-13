@@ -5,6 +5,7 @@ type Page =
   | "disciplines"
   | "discipline"
   | "study-plan"
+  | "calendar"
   | "matricula-import";
 type Props = {
   activePage: Page;
@@ -17,6 +18,7 @@ const items: { page: Exclude<Page, "discipline">; label: string }[] = [
   { page: "home", label: "Início" },
   { page: "disciplines", label: "Disciplinas" },
   { page: "study-plan", label: "Planejamento" },
+  { page: "calendar", label: "Calendário" },
   { page: "matricula-import", label: "Importar comprovante" },
 ];
 export function AppShell({

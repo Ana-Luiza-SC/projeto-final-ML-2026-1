@@ -84,3 +84,12 @@ O planejador materializa os dias em datas de `America/Sao_Paulo` e vincula uma a
 ## Complexidade acadêmica sob demanda
 
 A complexidade é apresentada como estimativa, nunca como propriedade objetiva. A análise é acionada para uma disciplina selecionada, usa no máximo a ementa pública confirmada, valida nível, confiança e evidências literais, e persiste modo/modelo/data. Resposta inválida, timeout ou ausência de provedor usa a regra local versionada. Não há análise em lote na sincronização do catálogo e nenhuma inferência vira pré-requisito ou conteúdo de avaliação.
+
+
+## Calendário e extração de eventos do plano
+
+Na spec 013, o agente/serviço de calendário não persiste automaticamente eventos extraídos do plano de ensino. O fluxo validado é: plano confirmado → preview estruturado → revisão humana → confirmação → persistência. Eventos ambíguos ou sem data explícita permanecem como rascunho e são rejeitados na confirmação até correção humana.
+
+A ausência de LLM não simula extração inteligente: o fallback usa apenas avaliações estruturadas já confirmadas no plano e informa quando não há evento explícito. Logs estruturados registram contagem de rascunhos, rejeições e latência, sem prompt, chave ou documento integral.
+
+O planejamento semanal continua determinístico para datas e janelas. O LLM, quando disponível, só explica o plano validado; resposta inválida ou inventada volta para fallback.

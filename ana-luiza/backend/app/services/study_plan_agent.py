@@ -101,9 +101,10 @@ def _window_minutes(window: Any) -> int:
     return _floor_block(_parse_minutes(window.end_time) - _parse_minutes(window.start_time))
 
 
-def _ordered_days(days: list[str]) -> list[str]:
+def _ordered_days(days: list[str], reference_date: date | None = None) -> list[str]:
     selected = set(days)
-    return sorted(selected, key=lambda day: (next_date_for_weekday(day), DAY_ORDER.index(day)))
+    reference = reference_date or local_today()
+    return sorted(selected, key=lambda day: (next_date_for_weekday(day, reference), DAY_ORDER.index(day)))
 
 
 def list_registered_disciplines(
@@ -244,7 +245,7 @@ def _build_plan_without_windows(
     allocations: dict[str, int],
     payload: StudyPlanRequest,
 ) -> list[dict[str, Any]]:
-    days = _ordered_days([str(day) for day in payload.availability.days_available])
+    days = _ordered_days([str(day) for day in payload.availability.days_available], local_today())
     sequence_by_day = {day: 0 for day in days}
     day_index = 0
     plan: list[dict[str, Any]] = []
@@ -277,7 +278,7 @@ def _build_plan_without_windows(
 
 
 def _window_sort_key(window: Any) -> tuple[int, int]:
-    return (next_date_for_weekday(str(window.day)), _parse_minutes(window.start_time))
+    return (next_date_for_weekday(str(window.day), local_today()), _parse_minutes(window.start_time))
 
 
 def _build_plan_with_windows(
@@ -385,7 +386,7 @@ def validate_study_plan(
         if session.get("day") not in allowed_days:
             raise StudyPlanOutputError("Plano contém dia não permitido.")
         scheduled_date = session.get("scheduled_date")
-        expected_date = next_date_for_weekday(session["day"])
+        expected_date = next_date_for_weekday(session["day"], local_today())
         if scheduled_date is not None and scheduled_date != expected_date:
             raise StudyPlanOutputError("Plano contém data incompatível com o dia disponível.")
         if session.get("assessment_date") and (scheduled_date is None or scheduled_date >= session["assessment_date"]):

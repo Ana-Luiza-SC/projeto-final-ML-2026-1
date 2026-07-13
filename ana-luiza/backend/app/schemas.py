@@ -709,6 +709,153 @@ class MatriculaImportConfirmResponse(BaseModel):
     request_id: str
 
 
+CalendarEventType = Literal["exam", "assignment", "presentation", "activity", "deadline", "other"]
+CalendarEventSource = Literal["manual", "assessment", "course_plan", "system"]
+CalendarEventStatus = Literal["draft", "confirmed", "cancelled", "completed"]
+
+
+def _sanitize_calendar_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = " ".join(value.strip().split())
+    if not cleaned:
+        return None
+    if "<" in cleaned or ">" in cleaned:
+        raise ValueError("HTML ou conteúdo executável não é permitido.")
+    return cleaned
+
+
+class AcademicEventBase(BaseModel):
+    discipline_id: UUID | None = None
+    assessment_id: UUID | None = None
+    title: str = Field(..., min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=1000)
+    event_type: CalendarEventType = "other"
+    start_at: datetime
+    end_at: datetime | None = None
+    all_day: bool = False
+    timezone: str = "America/Sao_Paulo"
+    weight: float | None = Field(default=None, gt=0, le=100)
+    status: CalendarEventStatus = "confirmed"
+    source: CalendarEventSource = "manual"
+    source_evidence: str | None = Field(default=None, max_length=500)
+    extraction_confidence: float | None = Field(default=None, ge=0, le=1)
+    source_fingerprint: str | None = Field(default=None, max_length=180)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("title", "description", "source_evidence", "source_fingerprint")
+    @classmethod
+    def sanitize_text(cls, value):
+        return _sanitize_calendar_text(value)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        if value != "America/Sao_Paulo":
+            raise ValueError("Timezone suportado neste MVP: America/Sao_Paulo.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> "AcademicEventBase":
+        if self.end_at is not None and self.end_at <= self.start_at:
+            raise ValueError("Fim do evento deve ser posterior ao início.")
+        return self
+
+
+class AcademicEventCreate(AcademicEventBase):
+    discipline_id: UUID | None = None
+    assessment_id: UUID | None = None
+    status: CalendarEventStatus = "confirmed"
+    source: Literal["manual"] = "manual"
+
+
+class AcademicEventUpdate(BaseModel):
+    discipline_id: UUID | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=1000)
+    event_type: CalendarEventType | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    all_day: bool | None = None
+    timezone: str | None = None
+    weight: float | None = Field(default=None, gt=0, le=100)
+    status: CalendarEventStatus | None = None
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("title", "description")
+    @classmethod
+    def sanitize_update_text(cls, value):
+        return _sanitize_calendar_text(value)
+
+
+class AcademicEventRead(AcademicEventBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    discipline_code: str | None = None
+    discipline_name: str | None = None
+
+
+class CalendarDraftEvent(BaseModel):
+    temporary_id: str = Field(..., min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    title: str = Field(..., min_length=1, max_length=160)
+    event_type: CalendarEventType
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    all_day: bool = True
+    timezone: str = "America/Sao_Paulo"
+    weight: float | None = Field(default=None, gt=0, le=100)
+    description: str | None = Field(default=None, max_length=1000)
+    source_evidence: str = Field(..., min_length=1, max_length=500)
+    confidence: float = Field(..., ge=0, le=1)
+    warnings: list[str] = Field(default_factory=list, max_length=10)
+    ambiguous: bool = False
+    source_fingerprint: str | None = Field(default=None, max_length=180)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("title", "description", "source_evidence", "source_fingerprint")
+    @classmethod
+    def sanitize_draft_text(cls, value):
+        return _sanitize_calendar_text(value)
+
+    @field_validator("warnings")
+    @classmethod
+    def sanitize_draft_warnings(cls, values: list[str]) -> list[str]:
+        clean = []
+        for item in values:
+            value = _sanitize_calendar_text(str(item))
+            if value:
+                clean.append(value[:200])
+        return clean
+
+
+class CalendarExtractionPreviewResponse(BaseModel):
+    preview_id: UUID
+    expires_at: datetime
+    draft_events: list[CalendarDraftEvent]
+    warnings: list[str] = Field(default_factory=list)
+    source: Literal["course_plan", "fallback"]
+    used_fallback: bool = False
+    fallback_reason: Literal["missing_course_plan", "missing_llm", "invalid_response", "timeout", "provider_unavailable", "no_explicit_events"] | None = None
+    latency_ms: float = Field(..., ge=0)
+
+
+class CalendarPreviewConfirmRequest(BaseModel):
+    preview_id: UUID
+    draft_events: list[CalendarDraftEvent] = Field(..., max_length=100)
+
+    model_config = {"extra": "forbid"}
+
+
+class CalendarPreviewConfirmResponse(BaseModel):
+    created_events: list[AcademicEventRead]
+    skipped_events: list[dict[str, str]] = Field(default_factory=list)
+    created_count: int = Field(..., ge=0)
+
+
 
 class AssessmentUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1)

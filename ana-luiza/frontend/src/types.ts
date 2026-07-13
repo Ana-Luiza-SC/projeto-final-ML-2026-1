@@ -395,3 +395,78 @@ export type AssessmentContentAssociation = { assessment_id: string; selections: 
 export type ContentDraftNode = { temporary_id: string; parent_temporary_id?: string | null; title: string; description?: string | null; source_evidence: string; confidence: number; warnings: string[] };
 export type ContentExtractionPreview = { preview_id: string; expires_at: string; draft_nodes: ContentDraftNode[]; warnings: string[]; source: "gemini" | "local_fallback"; model?: string | null; used_fallback: boolean; fallback_reason?: "missing_api_key" | "timeout" | "unavailable" | "invalid_response" | "no_explicit_content" | null; latency_ms: number };
 export type ContentExtractionConfirmation = { created_nodes: ContentNode[]; created_count: number };
+
+export type CalendarEventType = "exam" | "assignment" | "presentation" | "activity" | "deadline" | "other";
+export type CalendarEventStatus = "draft" | "confirmed" | "cancelled" | "completed";
+export type CalendarEventSource = "manual" | "assessment" | "course_plan" | "system";
+
+export type AcademicEvent = {
+  id: string;
+  discipline_id?: string | null;
+  assessment_id?: string | null;
+  title: string;
+  description?: string | null;
+  event_type: CalendarEventType;
+  start_at: string;
+  end_at?: string | null;
+  all_day: boolean;
+  timezone: "America/Sao_Paulo";
+  weight?: number | null;
+  status: CalendarEventStatus;
+  source: CalendarEventSource;
+  source_evidence?: string | null;
+  extraction_confidence?: number | null;
+  source_fingerprint?: string | null;
+  created_at: string;
+  updated_at: string;
+  discipline_code?: string | null;
+  discipline_name?: string | null;
+};
+
+export type AcademicEventPayload = {
+  discipline_id?: string | null;
+  title: string;
+  description?: string | null;
+  event_type: CalendarEventType;
+  start_at: string;
+  end_at?: string | null;
+  all_day: boolean;
+  timezone?: "America/Sao_Paulo";
+  weight?: number | null;
+  status?: CalendarEventStatus;
+  source?: "manual";
+};
+
+export type CalendarDraftEvent = {
+  temporary_id: string;
+  title: string;
+  event_type: CalendarEventType;
+  start_at?: string | null;
+  end_at?: string | null;
+  all_day: boolean;
+  timezone: "America/Sao_Paulo";
+  weight?: number | null;
+  description?: string | null;
+  source_evidence: string;
+  confidence: number;
+  warnings: string[];
+  ambiguous: boolean;
+  source_fingerprint?: string | null;
+};
+
+export type CalendarExtractionPreview = {
+  preview_id: string;
+  expires_at: string;
+  draft_events: CalendarDraftEvent[];
+  warnings: string[];
+  source: "course_plan" | "fallback";
+  used_fallback: boolean;
+  fallback_reason?: "missing_course_plan" | "missing_llm" | "invalid_response" | "timeout" | "provider_unavailable" | "no_explicit_events" | null;
+  latency_ms: number;
+};
+
+export type CalendarPreviewConfirmation = {
+  created_events: AcademicEvent[];
+  skipped_events: { temporary_id: string; reason: string }[];
+  created_count: number;
+};

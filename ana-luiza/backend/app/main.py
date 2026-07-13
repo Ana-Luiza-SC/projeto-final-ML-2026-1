@@ -18,6 +18,7 @@ from app.routers.discipline_assistant import router as discipline_assistant_rout
 from app.routers.contents import router as contents_router
 from app.routers.auth import router as auth_router
 from app.routers.catalog import router as catalog_router
+from app.routers.calendar import router as calendar_router
 from app.auth import bootstrap_test_user, decode_token, ensure_user, get_user
 from app.database import current_user_id, init_database
 
@@ -64,6 +65,10 @@ app = FastAPI(
         {
             "name": "academic-simulation",
             "description": "Simulação determinística de nota, menção, frequência e riscos.",
+        },
+        {
+            "name": "calendar",
+            "description": "Calendário acadêmico, eventos extraídos do plano e agenda semanal.",
         },
     ],
 )
@@ -127,10 +132,14 @@ async def authenticated_student_context(request: Request, call_next):
             current_user_id.reset(context_token)
 
 
-# CORS is intentionally restricted to local Vite dev origins for the MVP frontend.
+def _cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -149,6 +158,7 @@ def health() -> dict[str, str]:
 
 app.include_router(auth_router)
 app.include_router(catalog_router)
+app.include_router(calendar_router)
 app.include_router(disciplines_router)
 app.include_router(agent_router)
 app.include_router(sigaa_router)

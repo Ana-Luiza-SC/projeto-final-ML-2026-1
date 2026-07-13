@@ -62,6 +62,12 @@ class AssessmentRecord(Owned, Base):
     discipline_id: Mapped[str] = mapped_column(String(64), index=True)
 
 
+class AcademicEventRecord(Owned, Base):
+    __tablename__ = "academic_events"
+    discipline_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    assessment_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+
+
 class AbsenceRecord(Owned, Base):
     __tablename__ = "absences"
     discipline_id: Mapped[str] = mapped_column(String(64), index=True)

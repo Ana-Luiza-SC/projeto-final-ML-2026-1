@@ -4,6 +4,7 @@ import { DisciplinesPage } from "./pages/DisciplinesPage";
 import { DisciplineDetailPage } from "./pages/DisciplineDetailPage";
 import { StudyPlanPage } from "./pages/StudyPlanPage";
 import { MatriculaImportPage } from "./pages/MatriculaImportPage";
+import { CalendarPage } from "./pages/CalendarPage";
 import { PublicLandingPage } from "./pages/PublicLandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -18,6 +19,7 @@ type Route =
   | { page: "disciplines" }
   | { page: "discipline"; id: string }
   | { page: "study-plan" }
+  | { page: "calendar" }
   | { page: "matricula-import" };
 
 const RETURN_PATH_KEY = "estudaunb_return_path";
@@ -34,6 +36,7 @@ function routeFromPath(rawPath: string): Route {
     if (id) return { page: "discipline", id: decodeURIComponent(id) };
   }
   if (path === "/study-plan") return { page: "study-plan" };
+  if (path === "/calendar") return { page: "calendar" };
   if (path === "/matricula-import") return { page: "matricula-import" };
   return { page: "landing" };
 }
@@ -54,6 +57,7 @@ function pathFor(route: Route): string {
   if (route.page === "discipline")
     return `/disciplines/${encodeURIComponent(route.id)}`;
   if (route.page === "study-plan") return "/study-plan";
+  if (route.page === "calendar") return "/calendar";
   return "/matricula-import";
 }
 
@@ -117,6 +121,7 @@ export default function App() {
       goDisciplines: () => navigate({ page: "disciplines" }),
       goDiscipline: (id: string) => navigate({ page: "discipline", id }),
       goStudyPlan: () => navigate({ page: "study-plan" }),
+      goCalendar: () => navigate({ page: "calendar" }),
       goMatriculaImport: () => navigate({ page: "matricula-import" }),
     }),
     [navigate],
@@ -202,6 +207,7 @@ export default function App() {
         />
       )}
       {route.page === "study-plan" && <StudyPlanPage />}
+      {route.page === "calendar" && <CalendarPage />}
       {route.page === "matricula-import" && (
         <MatriculaImportPage onOpenDisciplines={navigation.goDisciplines} />
       )}

@@ -17,6 +17,7 @@ services:
       EMAIL_TESTE: ${EMAIL_TESTE:-teste@example.invalid}
       SENHA_TESTE: ${SENHA_TESTE:-altere-esta-senha}
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     volumes:
       - estudaunb_data:/data
 
@@ -24,7 +25,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_API_URL: ${VITE_API_URL:-${VITE_API_BASE_URL:-http://localhost:8000}}
     ports:
       - "5173:5173"
     depends_on:

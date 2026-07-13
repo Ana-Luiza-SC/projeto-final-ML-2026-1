@@ -9,6 +9,7 @@ from app.database import (
     User,
     DisciplineRecord,
     AssessmentRecord,
+    AcademicEventRecord,
     AbsenceRecord,
     CoursePlanRecord,
     ContentNodeRecord,
@@ -24,6 +25,7 @@ from app.database import (
 IMPORT_PREVIEWS: dict[str, dict] = {}
 COURSE_PLAN_PREVIEWS: dict[str, dict] = {}
 CONTENT_EXTRACTION_PREVIEWS: dict[str, dict] = {}
+EVENT_EXTRACTION_PREVIEWS: dict[str, dict] = {}
 
 
 def utc_now():
@@ -151,6 +153,7 @@ class RecordMap(MutableMapping):
 
 DISCIPLINES = RecordMap(DisciplineRecord)
 ASSESSMENTS = RecordMap(AssessmentRecord, "discipline_id", "list")
+EVENTS = RecordMap(AcademicEventRecord)
 ABSENCES = RecordMap(AbsenceRecord, "discipline_id", "list")
 COURSE_PLANS = RecordMap(CoursePlanRecord)
 CONTENT_NODES = RecordMap(ContentNodeRecord, "discipline_id", "dict")
@@ -272,6 +275,7 @@ def add_assessment(discipline_id, payload):
     items = ASSESSMENTS.get(discipline_id, [])
     items.append(item)
     ASSESSMENTS[discipline_id] = items
+    sync_assessment_event(discipline_id, item)
     record = get_discipline(discipline_id)
     record["updated_at"] = utc_now()
     _save_discipline(record)
@@ -361,6 +365,7 @@ def update_assessment(did, aid, payload):
         return None
     item.update(payload)
     ASSESSMENTS[did] = items
+    sync_assessment_event(did, item)
     record = get_discipline(did)
     record["updated_at"] = utc_now()
     _save_discipline(record)
@@ -373,6 +378,7 @@ def delete_assessment(did, aid):
     ASSESSMENTS[did] = new
     if len(new) != len(items):
         ASSESSMENT_CONTENT_LINKS.pop(aid, None)
+        cancel_assessment_event(aid)
         return True
     return False
 
@@ -439,3 +445,197 @@ def save_course_plan(did, payload):
         discipline["workload_hours"] = record["workload_hours"]
         _save_discipline(discipline)
     return record
+
+
+def _assessment_event_type(assessment: dict) -> str:
+    name = str(assessment.get("name") or "").casefold()
+    if any(word in name for word in ["prova", "teste", "taf", "mtai"]):
+        return "exam"
+    if any(word in name for word in ["entrega", "trabalho", "relatório", "relatorio"]):
+        return "assignment"
+    if "apresent" in name or "semin" in name:
+        return "presentation"
+    if "prazo" in name or "deadline" in name:
+        return "deadline"
+    return "activity"
+
+
+def _date_to_event_start(value):
+    if not value:
+        return None
+    raw = value.isoformat() if hasattr(value, "isoformat") else str(value)
+    return raw[:10] + "T00:00:00-03:00"
+
+
+def _assessment_event_payload(discipline_id: str, assessment: dict) -> dict | None:
+    start_at = _date_to_event_start(assessment.get("date"))
+    if not start_at:
+        return None
+    discipline = get_discipline(discipline_id) or {}
+    now = utc_now()
+    aid = str(assessment["id"])
+    return {
+        "id": str(uuid4()),
+        "discipline_id": discipline_id,
+        "assessment_id": aid,
+        "title": str(assessment.get("name") or "Avaliação"),
+        "description": assessment.get("description") or assessment.get("notes"),
+        "event_type": _assessment_event_type(assessment),
+        "start_at": start_at,
+        "end_at": None,
+        "all_day": True,
+        "timezone": "America/Sao_Paulo",
+        "weight": assessment.get("weight") or assessment.get("group_weight"),
+        "status": "completed" if assessment.get("status") == "completed" else "cancelled" if assessment.get("status") == "cancelled" else "confirmed",
+        "source": "assessment",
+        "source_evidence": f'Avaliação cadastrada: {assessment.get("name") or "sem título"}' + (f' — peso {assessment.get("weight")}%.' if assessment.get("weight") is not None else "."),
+        "extraction_confidence": 1.0,
+        "source_fingerprint": f"assessment:{aid}",
+        "created_at": now,
+        "updated_at": now,
+        "discipline_code": discipline.get("code"),
+        "discipline_name": discipline.get("name"),
+    }
+
+
+def _save_event(record: dict) -> dict:
+    EVENTS[str(record["id"])] = record
+    return record
+
+
+def _with_discipline_meta(event: dict) -> dict:
+    discipline_id = event.get("discipline_id")
+    if discipline_id:
+        discipline = get_discipline(str(discipline_id))
+        if discipline:
+            event = {**event, "discipline_code": discipline.get("code"), "discipline_name": discipline.get("name")}
+    return event
+
+
+def list_events(start_at=None, end_at=None, discipline_id=None, event_type=None, status=None):
+    def parse(value):
+        if value is None:
+            return None
+        raw = value.isoformat() if hasattr(value, "isoformat") else str(value)
+        return raw
+    start_raw, end_raw = parse(start_at), parse(end_at)
+    items = []
+    for event in EVENTS.values():
+        if discipline_id and str(event.get("discipline_id")) != str(discipline_id):
+            continue
+        if event_type and event.get("event_type") != event_type:
+            continue
+        if status and event.get("status") != status:
+            continue
+        event_start = str(event.get("start_at"))
+        if start_raw and event_start < start_raw:
+            continue
+        if end_raw and event_start > end_raw:
+            continue
+        items.append(_with_discipline_meta(event))
+    return sorted(items, key=lambda item: (str(item.get("start_at")), item.get("title") or ""))
+
+
+def upcoming_events(limit=8, reference=None):
+    start = reference or utc_now().isoformat()
+    return list_events(start_at=start, status="confirmed")[:limit]
+
+
+def get_event(event_id):
+    event = EVENTS.get(str(event_id))
+    return _with_discipline_meta(event) if event else None
+
+
+def create_event(payload):
+    if payload.get("discipline_id") and get_discipline(str(payload["discipline_id"])) is None:
+        raise ValueError("Disciplina não encontrada.")
+    now = utc_now()
+    event = {"id": str(uuid4()), **payload, "created_at": now, "updated_at": now}
+    return _with_discipline_meta(_save_event(event))
+
+
+def update_event(event_id, payload):
+    event = EVENTS.get(str(event_id))
+    if event is None:
+        return None
+    if event.get("source") == "assessment" and any(key in payload for key in ["title", "start_at", "weight", "discipline_id"]):
+        raise ValueError("Eventos originados de avaliação devem ser alterados na própria avaliação.")
+    if payload.get("discipline_id") and get_discipline(str(payload["discipline_id"])) is None:
+        raise ValueError("Disciplina não encontrada.")
+    event.update({k: v for k, v in payload.items() if v is not None})
+    event["updated_at"] = utc_now()
+    return _with_discipline_meta(_save_event(event))
+
+
+def set_event_status(event_id, status):
+    event = EVENTS.get(str(event_id))
+    if event is None:
+        return None
+    event["status"] = status
+    event["updated_at"] = utc_now()
+    return _with_discipline_meta(_save_event(event))
+
+
+def delete_event(event_id):
+    event = EVENTS.get(str(event_id))
+    if event is None:
+        return False
+    if event.get("source") == "assessment":
+        event["status"] = "cancelled"
+        event["updated_at"] = utc_now()
+        _save_event(event)
+        return True
+    EVENTS.pop(str(event_id), None)
+    return True
+
+
+def find_event_by_assessment(assessment_id):
+    return next((event for event in EVENTS.values() if event.get("source") == "assessment" and str(event.get("assessment_id")) == str(assessment_id)), None)
+
+
+def find_event_by_fingerprint(fingerprint):
+    if not fingerprint:
+        return None
+    return next((event for event in EVENTS.values() if event.get("source_fingerprint") == fingerprint), None)
+
+
+def sync_assessment_event(discipline_id, assessment):
+    existing = find_event_by_assessment(assessment["id"])
+    payload = _assessment_event_payload(discipline_id, assessment)
+    if payload is None:
+        if existing:
+            existing["status"] = "cancelled"
+            existing["updated_at"] = utc_now()
+            _save_event(existing)
+        return None
+    if existing:
+        preserved = {"id": existing["id"], "created_at": existing.get("created_at", payload["created_at"])}
+        existing.update({**payload, **preserved, "updated_at": utc_now()})
+        return _save_event(existing)
+    return _save_event(payload)
+
+
+def cancel_assessment_event(assessment_id):
+    event = find_event_by_assessment(assessment_id)
+    if event:
+        event["status"] = "cancelled"
+        event["updated_at"] = utc_now()
+        _save_event(event)
+    return event
+
+
+def save_event_extraction_preview(preview):
+    EVENT_EXTRACTION_PREVIEWS[str(preview["preview_id"])] = preview
+    return preview
+
+
+def get_event_extraction_preview(preview_id):
+    preview = EVENT_EXTRACTION_PREVIEWS.get(str(preview_id))
+    if preview and preview.get("expires_at") and preview["expires_at"] <= utc_now():
+        EVENT_EXTRACTION_PREVIEWS.pop(str(preview_id), None)
+        return None
+    return preview
+
+
+def delete_event_extraction_preview(preview_id):
+    EVENT_EXTRACTION_PREVIEWS.pop(str(preview_id), None)

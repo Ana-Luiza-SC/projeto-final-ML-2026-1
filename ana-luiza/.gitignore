@@ -32,3 +32,20 @@ backend/estudaunb.db
 backend/estudaunb.db-wal
 backend/estudaunb.db-shm
 backend/estudaunb.db-journal
+# Caches, logs e artefatos locais
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.pyc
+*.log
+logs/
+*.tmp
+*.temp
+.DS_Store
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+coverage/
+playwright-report/
+test-results/

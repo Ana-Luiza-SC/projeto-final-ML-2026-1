@@ -22,9 +22,16 @@ import type {
   MatriculaPdfPreviewResponse,
   MatriculaImportConfirmRequest,
   MatriculaImportConfirmResponse,
+  AcademicEvent,
+  AcademicEventPayload,
+  CalendarDraftEvent,
+  CalendarExtractionPreview,
+  CalendarPreviewConfirmation,
+  CalendarEventStatus,
+  CalendarEventType,
 } from "../types";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 export function getApiBaseUrl() {
   return API_BASE_URL;
@@ -286,3 +293,20 @@ export function getMe() { return request<AuthUser>("/api/auth/me"); }
 export function logout() { localStorage.removeItem("estudaunb_token"); }
 export function analyzeDisciplineComplexity(id: string, reanalyze = false) { return request<ComplexityAnalysis>(`/api/disciplines/${id}/complexity-analysis?reanalyze=${reanalyze}`, { method: "POST" }); }
 export function refreshDisciplineCatalog(id: string) { return request<Discipline>(`/api/disciplines/${id}/catalog-refresh`, { method: "POST" }); }
+
+
+export function listCalendarEvents(params: { start_at: string; end_at: string; discipline_id?: string; event_type?: CalendarEventType; status?: CalendarEventStatus }) {
+  const search = new URLSearchParams({ start_at: params.start_at, end_at: params.end_at });
+  if (params.discipline_id) search.set("discipline_id", params.discipline_id);
+  if (params.event_type) search.set("event_type", params.event_type);
+  if (params.status) search.set("status", params.status);
+  return request<AcademicEvent[]>(`/api/calendar/events?${search.toString()}`);
+}
+export function listUpcomingCalendarEvents(limit = 8) { return request<AcademicEvent[]>(`/api/calendar/events/upcoming?limit=${limit}`); }
+export function createCalendarEvent(payload: AcademicEventPayload) { return request<AcademicEvent>("/api/calendar/events", { method: "POST", body: JSON.stringify({ timezone: "America/Sao_Paulo", source: "manual", ...payload }) }); }
+export function updateCalendarEvent(eventId: string, payload: Partial<AcademicEventPayload>) { return request<AcademicEvent>(`/api/calendar/events/${eventId}`, { method: "PATCH", body: JSON.stringify(payload) }); }
+export function completeCalendarEvent(eventId: string) { return request<AcademicEvent>(`/api/calendar/events/${eventId}/complete`, { method: "POST" }); }
+export function cancelCalendarEvent(eventId: string) { return request<AcademicEvent>(`/api/calendar/events/${eventId}/cancel`, { method: "POST" }); }
+export function deleteCalendarEvent(eventId: string) { return request<unknown>(`/api/calendar/events/${eventId}`, { method: "DELETE" }); }
+export function previewCalendarExtraction(disciplineId: string) { return request<CalendarExtractionPreview>(`/api/disciplines/${disciplineId}/calendar/extract-preview`, { method: "POST" }); }
+export function confirmCalendarPreview(disciplineId: string, previewId: string, draftEvents: CalendarDraftEvent[]) { return request<CalendarPreviewConfirmation>(`/api/disciplines/${disciplineId}/calendar/confirm-preview`, { method: "POST", body: JSON.stringify({ preview_id: previewId, draft_events: draftEvents }) }); }
