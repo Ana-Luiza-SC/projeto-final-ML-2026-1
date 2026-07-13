@@ -403,9 +403,10 @@ export type ContentDraftNode = { temporary_id: string; parent_temporary_id?: str
 export type ContentExtractionPreview = { preview_id: string; expires_at: string; draft_nodes: ContentDraftNode[]; warnings: string[]; source: "gemini" | "local_fallback"; model?: string | null; used_fallback: boolean; fallback_reason?: "missing_api_key" | "timeout" | "unavailable" | "invalid_response" | "no_explicit_content" | null; latency_ms: number };
 export type ContentExtractionConfirmation = { created_nodes: ContentNode[]; created_count: number };
 
-export type CalendarEventType = "exam" | "assignment" | "presentation" | "activity" | "deadline" | "other";
+export type CalendarEventType = "exam" | "assignment" | "presentation" | "activity" | "deadline" | "study_block" | "other";
 export type CalendarEventStatus = "draft" | "confirmed" | "cancelled" | "completed";
-export type CalendarEventSource = "manual" | "assessment" | "course_plan" | "system";
+export type CalendarEventSource = "manual" | "assessment" | "course_plan" | "study_plan" | "system";
+export type RecurrenceRule = { frequency: "none" | "daily" | "weekly" | "biweekly" | "monthly" | "yearly" | "custom_weekly"; interval?: number; weekdays?: StudyPlanDay[]; ends?: { mode: "never" | "on_date" | "after_count"; until?: string | null; count?: number | null }; rrule?: string | null };
 
 export type AcademicEvent = {
   id: string;
@@ -424,6 +425,17 @@ export type AcademicEvent = {
   source_evidence?: string | null;
   extraction_confidence?: number | null;
   source_fingerprint?: string | null;
+  recurrence?: RecurrenceRule | null;
+  study_plan_id?: string | null;
+  content_id?: string | null;
+  priority_score?: number | null;
+  priority_band?: "low" | "medium" | "high" | null;
+  priority_reason?: string | null;
+  algorithm_version?: string | null;
+  generated_at?: string | null;
+  recurrence_series_id?: string | null;
+  occurrence_id?: string | null;
+  occurrence_date?: string | null;
   created_at: string;
   updated_at: string;
   discipline_code?: string | null;
@@ -442,6 +454,7 @@ export type AcademicEventPayload = {
   weight?: number | null;
   status?: CalendarEventStatus;
   source?: "manual";
+  recurrence?: RecurrenceRule | null;
 };
 
 export type CalendarDraftEvent = {
@@ -460,6 +473,14 @@ export type CalendarDraftEvent = {
   ambiguous: boolean;
   source_fingerprint?: string | null;
 };
+
+
+export type WeeklyAvailabilityWindow = { weekday: StudyPlanDay; start_time: string; end_time: string; available?: boolean };
+export type AvailabilitySummary = { timezone: "America/Sao_Paulo"; daily_totals: Partial<Record<StudyPlanDay, number>>; weekly_total_minutes: number; normalized_windows: WeeklyAvailabilityWindow[]; warnings: string[] };
+export type WeeklyPriorityResult = { discipline_id: string; discipline_code?: string | null; discipline_name: string; content_id?: string | null; assessment_id?: string | null; assessment_name?: string | null; deadline_at?: string | null; priority_score: number; priority_band: "low" | "medium" | "high"; evidence_used: { source_type: string; source_id?: string | null; summary: string }[]; missing_evidence: string[]; reason: string };
+export type PlannedStudyBlockPreview = { temporary_id: string; discipline_id: string; discipline_code?: string | null; discipline_name: string; content_id?: string | null; assessment_id?: string | null; title: string; reason: string; priority_score: number; priority_band: "low" | "medium" | "high"; start_at: string; end_at: string; state: "planned" };
+export type WeeklyPlanPreview = { study_plan_id: string; week_start: string; timezone: "America/Sao_Paulo"; availability: AvailabilitySummary; ranked_priorities: WeeklyPriorityResult[]; planned_blocks: PlannedStudyBlockPreview[]; unallocated_priorities: WeeklyPriorityResult[]; conflicts: string[]; warnings: string[]; algorithm_version: string; generated_at: string };
+export type WeeklyPlanConfirmResponse = { study_plan_id: string; created_events: AcademicEvent[]; skipped_blocks: { temporary_id: string; reason: string }[]; created_count: number };
 
 export type CalendarExtractionPreview = {
   preview_id: string;

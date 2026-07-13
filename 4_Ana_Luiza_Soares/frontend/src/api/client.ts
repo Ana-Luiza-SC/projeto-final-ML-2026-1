@@ -29,6 +29,9 @@ import type {
   CalendarPreviewConfirmation,
   CalendarEventStatus,
   CalendarEventType,
+  WeeklyAvailabilityWindow,
+  WeeklyPlanPreview,
+  WeeklyPlanConfirmResponse,
 } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -310,3 +313,10 @@ export function cancelCalendarEvent(eventId: string) { return request<AcademicEv
 export function deleteCalendarEvent(eventId: string) { return request<unknown>(`/api/calendar/events/${eventId}`, { method: "DELETE" }); }
 export function previewCalendarExtraction(disciplineId: string) { return request<CalendarExtractionPreview>(`/api/disciplines/${disciplineId}/calendar/extract-preview`, { method: "POST" }); }
 export function confirmCalendarPreview(disciplineId: string, previewId: string, draftEvents: CalendarDraftEvent[]) { return request<CalendarPreviewConfirmation>(`/api/disciplines/${disciplineId}/calendar/confirm-preview`, { method: "POST", body: JSON.stringify({ preview_id: previewId, draft_events: draftEvents }) }); }
+
+export function createWeeklyPlanPreview(payload: { week_start: string; windows: WeeklyAvailabilityWindow[]; excluded_discipline_ids?: string[]; objective_text?: string | null }) {
+  return request<WeeklyPlanPreview>("/api/study-plans/weekly-preview", { method: "POST", body: JSON.stringify(payload) });
+}
+export function confirmWeeklyPlan(studyPlanId: string) {
+  return request<WeeklyPlanConfirmResponse>(`/api/study-plans/${studyPlanId}/confirm`, { method: "POST" });
+}
