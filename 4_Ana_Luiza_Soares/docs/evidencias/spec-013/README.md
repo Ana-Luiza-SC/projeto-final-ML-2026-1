@@ -99,4 +99,3 @@ docker compose down
 
 - Screenshots não foram capturadas nesta execução; evidências são textuais e reproduzíveis.
 - Deploy real não foi executado por ausência de credenciais Render/Neon.
-- Deploy real não foi executado por ausência de credenciais Render/Neon.

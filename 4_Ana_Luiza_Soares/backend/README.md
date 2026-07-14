@@ -1,6 +1,6 @@
 # Backend EstudaUnB
 
-Backend inicial do MVP EstudaUnB com FastAPI e armazenamento em memória.
+Backend do EstudaUnB com FastAPI, SQLAlchemy, Alembic, autenticação, persistência acadêmica, integrações públicas e fallbacks determinísticos.
 
 ## Instalação
 
@@ -175,15 +175,15 @@ curl 'http://localhost:8000/api/disciplines/{id}/academic-simulation?target_aver
 
 A frequência mínima é 75%. Faltas acima de 25% indicam risco grave ou reprovação por falta, mesmo quando a nota estiver boa. Se a frequência for desconhecida, a API não afirma aprovação final.
 
-## Limitações da primeira versão
+## Limitações atuais
 
-- Armazenamento apenas em memória.
-- Frontend separado em `../frontend`.
-- Sem autenticação.
-- LLM opcional; sem `GOOGLE_API_KEY`, o agente usa fallback por regras.
-- Consulta SIGAA limitada à fonte pública de componentes curriculares; sem área autenticada e sem scraping massivo.
-- Sem parsing real de PDF.
-- Sem calendário.
+- O frontend permanece separado em `../frontend`.
+- O LLM é opcional; sem `GOOGLE_API_KEY`, o agente usa fallback por regras.
+- A consulta SIGAA é limitada a páginas públicas e pode falhar quando o HTML/JSF mudar; cadastro manual e cache são os fallbacks.
+- PDFs são processados temporariamente e dependem de revisão humana; OCR não é garantido.
+- Não há sincronização com calendários externos, notificações, recuperação de senha ou login social.
+- O ciclo de atividade/timer e a adaptação pós-estudo das Specs 015/016 não estão implementados.
+- O branch `dev` não expõe registro público; `ALLOW_REGISTRATION` não ativa um endpoint neste checkout.
 
 ## Persistência, autenticação e catálogo local
 

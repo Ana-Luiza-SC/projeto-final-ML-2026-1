@@ -1,5 +1,7 @@
 # Arquitetura do EstudaUnB
 
+Diagramas reutilizáveis e revisados: [`diagrams/README.md`](diagrams/README.md). Rastreabilidade de capacidades: [`spec-traceability.md`](spec-traceability.md).
+
 O EstudaUnB usa uma arquitetura simples de MVP: frontend React/Vite, backend FastAPI e banco relacional via SQLAlchemy. Em desenvolvimento o banco padrão é SQLite; em produção, `DATABASE_URL` deve apontar para PostgreSQL compatível.
 
 ```mermaid
@@ -31,3 +33,7 @@ Tabelas principais: `users`, `disciplines`, `assessments`, `academic_events`, `a
 - Sem armazenamento de PDF bruto por padrão.
 - Sem dados pessoais em logs.
 - Sem sessão de estudo depois do prazo da avaliação.
+
+## Planejamento e atividades
+
+`/study-plan` calcula prioridade, demanda estimada, capacidade e blocos planejados. A confirmação persiste blocos como eventos; ela não registra execução. O ciclo de **study activity** da Spec 015 e a adaptação da Spec 016 ainda não existem. O serviço legado de sessões permanece apenas para compatibilidade.

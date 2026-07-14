@@ -91,7 +91,7 @@ Depois clique em `Gerar recomendação de estudo`. O backend funciona sem `GOOGL
 ## Limitações
 
 - Cadastro público depende exclusivamente de `GET /api/auth/registration-status`; nenhuma variável Vite controla a autorização.
-- Sem calendário nesta etapa.
+- Há calendário mensal e semanal temporal, recorrência manual e blocos planejados confirmados, mas não há sincronização externa.
 - Importações de documentos sempre exigem revisão humana antes da persistência.
 - Agente disponível via backend; sem `GOOGLE_API_KEY`, usa fallback por regras.
 - Consulta SIGAA limitada à fonte pública de componentes curriculares, via backend.
