@@ -10,7 +10,7 @@ Stakeholders: estudante, docente/orientador da disciplina de IA/ML e avaliadores
 
 Funcionalidades principais:
 
-- autenticação com usuário de demonstração por variáveis de ambiente;
+- autenticação com usuário de demonstração por variáveis de ambiente; neste branch `dev`, o cadastro público permanece apenas informativo;
 - cadastro manual de disciplinas;
 - importação revisada de atestado de matrícula em PDF;
 - consulta opcional a componentes públicos do SIGAA;
@@ -58,7 +58,7 @@ Variáveis principais:
 - `DATABASE_URL`: `sqlite:///./data/estudaunb.db` local ou URL PostgreSQL/Neon em produção;
 - `AUTH_SECRET`: segredo longo para tokens;
 - `EMAIL_TESTE` e `SENHA_TESTE`: credenciais do usuário de demonstração;
-- `ALLOW_REGISTRATION=false`: cadastro público permanece desabilitado;
+- `ALLOW_REGISTRATION=false`: variável reservada; neste checkout `dev` não há endpoint de cadastro, portanto alterar o valor não habilita a funcionalidade;
 - `GOOGLE_API_KEY`: opcional;
 - `CORS_ORIGINS`: origens do frontend;
 - `VITE_API_URL`: URL pública do backend para o frontend.
@@ -179,6 +179,8 @@ Regras principais:
 
 A rota protegida `/study-plan` concentra disponibilidade, prioridades automáticas, explicação de capacidade, preview e confirmação. A rota `/calendar` mostra os blocos confirmados em visões mensal e semanal temporal, sem duplicar o formulário de planejamento.
 
+Um bloco planejado é diferente de uma atividade de estudo executada. O catálogo de métodos e as recomendações contextuais estão implementados, mas o ciclo de atividade/timer da Spec 015 e a adaptação pós-estudo da Spec 016 ainda não estão implementados.
+
 ## Assistente contextual
 
 As páginas autenticadas disponibilizam um drawer recolhível. O frontend envia apenas contexto estruturado, como rota e identificadores selecionados; o backend reconstrói disciplinas, avaliações, prioridades, capacidade, eventos e previews pertencentes ao usuário.
@@ -198,3 +200,13 @@ Datas são restrições rígidas no backend. Para conteúdos associados a avalia
 - O LLM é opcional; sem chave, a personalização usa fallback.
 - O frontend não possui testes automatizados extensos além de TypeScript/build.
 - O deploy real exige credenciais externas de Render/Neon e não é executado pelo repositório.
+- O cadastro controlado por configuração existe no branch `main`, mas não está presente neste checkout `dev`; a variável `ALLOW_REGISTRATION` é inativa aqui.
+
+## Especificações, diagramas e relatório
+
+- Fonte canônica em inglês: [`specs/`](specs/README.md).
+- Espelho em Português do Brasil: [`spec_traduzido/`](spec_traduzido/README.md).
+- Rastreabilidade: [`docs/spec-traceability.md`](docs/spec-traceability.md).
+- Diagramas Mermaid: [`docs/diagrams/`](docs/diagrams/README.md).
+- Relatório público em elaboração: [`docs/report/`](docs/report/README.md).
+- Índice de evidências: [`docs/evidence/`](docs/evidence/README.md).

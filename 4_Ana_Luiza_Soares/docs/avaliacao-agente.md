@@ -8,7 +8,7 @@ Nesta etapa, a avaliação cobre apenas o fallback por regras. Não há chamada 
 
 ## Estratégia
 
-- Executar cenários automatizados via `pytest` em [backend/tests/test_agent_evaluation_scenarios.py](/home/analu/unb/tees/trabalho_final/ana-luiza/backend/tests/test_agent_evaluation_scenarios.py).
+- Executar cenários automatizados via `pytest` em [`backend/tests/test_agent_evaluation_scenarios.py`](../backend/tests/test_agent_evaluation_scenarios.py).
 - Exercitar o endpoint `POST /api/agent/study-recommendation` com dados controlados.
 - Forçar o caminho de fallback por regras com `LLM_PROVIDER=google`, `LLM_FALLBACK_ENABLED=true` e ausência de `GOOGLE_API_KEY`.
 

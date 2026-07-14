@@ -1,6 +1,6 @@
 # Backend EstudaUnB
 
-Backend inicial do MVP EstudaUnB com FastAPI e armazenamento em memória.
+Backend do EstudaUnB com FastAPI, SQLAlchemy, Alembic, autenticação, persistência acadêmica, integrações públicas e fallbacks determinísticos.
 
 ## Instalação
 
@@ -175,21 +175,21 @@ curl 'http://localhost:8000/api/disciplines/{id}/academic-simulation?target_aver
 
 A frequência mínima é 75%. Faltas acima de 25% indicam risco grave ou reprovação por falta, mesmo quando a nota estiver boa. Se a frequência for desconhecida, a API não afirma aprovação final.
 
-## Limitações da primeira versão
+## Limitações atuais
 
-- Armazenamento apenas em memória.
-- Frontend separado em `../frontend`.
-- Sem autenticação.
-- LLM opcional; sem `GOOGLE_API_KEY`, o agente usa fallback por regras.
-- Consulta SIGAA limitada à fonte pública de componentes curriculares; sem área autenticada e sem scraping massivo.
-- Sem parsing real de PDF.
-- Sem calendário.
+- O frontend permanece separado em `../frontend`.
+- O LLM é opcional; sem `GOOGLE_API_KEY`, o agente usa fallback por regras.
+- A consulta SIGAA é limitada a páginas públicas e pode falhar quando o HTML/JSF mudar; cadastro manual e cache são os fallbacks.
+- PDFs são processados temporariamente e dependem de revisão humana; OCR não é garantido.
+- Não há sincronização com calendários externos, notificações, recuperação de senha ou login social.
+- O ciclo de atividade/timer e a adaptação pós-estudo das Specs 015/016 não estão implementados.
+- O branch `dev` não expõe registro público; `ALLOW_REGISTRATION` não ativa um endpoint neste checkout.
 
 ## Persistência, autenticação e catálogo local
 
 Os dados acadêmicos usam SQLAlchemy e `DATABASE_URL` (resolvido para `backend/data/estudaunb.db` por padrão, independentemente do diretório de execução). Execute `alembic upgrade head` antes da API. O Compose usa um volume SQLite persistente; PostgreSQL pode ser selecionado por URL sem alterar os serviços.
 
-O cadastro público não existe no MVP. Na inicialização, `EMAIL_TESTE` e `SENHA_TESTE` criam ou atualizam idempotentemente o usuário restrito; `AUTH_SECRET` assina sessões HMAC. Senhas usam PBKDF2-SHA256 com salt e nunca são registradas.
+Neste branch `dev`, o cadastro público não existe. Na inicialização, `EMAIL_TESTE` e `SENHA_TESTE` criam ou atualizam idempotentemente o usuário restrito; `AUTH_SECRET` assina sessões HMAC. Senhas usam PBKDF2-SHA256 com salt e nunca são registradas. A variável `ALLOW_REGISTRATION` está documentada, mas é inativa neste checkout.
 
 A busca pública do SIGAA mantém sessão JSF/ViewState, timeout, repetição limitada e intervalo entre consultas. Resultados enriquecidos são sanitizados e gravados com upsert em `catalog_components`; disciplinas do estudante apenas referenciam/copiam os metadados acadêmicos, sem apagar avaliações ou conteúdos. `POST /api/disciplines/{id}/complexity-analysis` analisa somente a disciplina solicitada e persiste o resultado, com fallback auditável.
 

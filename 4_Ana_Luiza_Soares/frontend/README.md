@@ -90,8 +90,8 @@ Depois clique em `Gerar recomendação de estudo`. O backend funciona sem `GOOGL
 
 ## Limitações
 
-- Autenticação restrita ao usuário configurado no backend; cadastro público desabilitado.
-- Sem calendário nesta etapa.
+- Autenticação restrita ao usuário configurado no backend; neste branch `dev`, cadastro público é apenas informativo.
+- Há calendário mensal e semanal temporal, recorrência manual e blocos planejados confirmados, mas não há sincronização externa.
 - Importações de documentos sempre exigem revisão humana antes da persistência.
 - Agente disponível via backend; sem `GOOGLE_API_KEY`, usa fallback por regras.
 - Consulta SIGAA limitada à fonte pública de componentes curriculares, via backend.
@@ -101,7 +101,7 @@ Depois clique em `Gerar recomendação de estudo`. O backend funciona sem `GOOGL
 
 - `/` é a landing page pública do EstudaUnB.
 - `/login` autentica com o usuário de demonstração configurado no backend.
-- `/register` valida o formulário somente no navegador e informa que o cadastro público está indisponível; não chama API nem persiste credenciais.
+- `/register` valida o formulário somente no navegador e informa que o cadastro público está indisponível; não chama API nem persiste credenciais neste checkout `dev`.
 - `/app`, `/disciplines`, `/study-plan` e `/matricula-import` são rotas protegidas.
 
-Use `ALLOW_REGISTRATION=false` no backend. O usuário de demonstração é criado por `EMAIL_TESTE` e `SENHA_TESTE`; não inclua os valores reais em código, HTML, logs ou documentação.
+Use `ALLOW_REGISTRATION=false` no backend. A variável não habilita registro em `dev`, pois o endpoint correspondente não está presente. O usuário de demonstração é criado por `EMAIL_TESTE` e `SENHA_TESTE`; não inclua valores reais em código, HTML, logs ou documentação.
