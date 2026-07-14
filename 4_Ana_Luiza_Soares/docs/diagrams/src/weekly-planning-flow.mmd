@@ -1,0 +1,8 @@
+flowchart LR
+  Windows[Availability windows] --> Priority[Deterministic priority and demand]
+  Events[Academic events] --> Priority
+  Priority --> Allocation[Block allocation]
+  Allocation --> Preview[Preview and capacity analysis]
+  Preview --> Confirm{Confirm?}
+  Confirm -->|yes| Calendar[Persist calendar study blocks]
+  Confirm -->|no| None[No mutation]
