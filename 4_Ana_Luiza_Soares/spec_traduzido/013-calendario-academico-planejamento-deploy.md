@@ -23,4 +23,4 @@ Implementar a última grande iteração do MVP EstudaUnB antes da entrega: calen
 
 ## Fora do escopo mantido
 
-Não foram implementados Google Calendar, Outlook, notificações, e-mail, push, drag-and-drop, colaboração, compartilhamento público, scraping docente, novo modelo de ML, cadastro público funcional, recuperação de senha ou login social.
+Não foram implementados Google Calendar, Outlook, notificações, e-mail, push, drag-and-drop, colaboração, compartilhamento público, scraping docente, novo modelo de ML, recuperação de senha ou login social. O cadastro público controlado por configuração foi adicionado depois desta spec e está registrado no aviso de evolução da Spec 012.

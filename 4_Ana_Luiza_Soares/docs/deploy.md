@@ -1,5 +1,12 @@
 # Deploy
 
+## Endpoints publicados
+
+- Frontend (Render Static Site): https://name-estudaunb-frontend.onrender.com/
+- Backend (Swagger/FastAPI): https://projeto-final-ml-2026-1.onrender.com/docs
+
+Ambos responderam HTTP 200 em 2026-07-13. Essa verificação confirma disponibilidade pontual, não um SLA nem a configuração interna do banco. O `render.yaml` e `DATABASE_URL` documentam a arquitetura Render + PostgreSQL/Neon sem expor credenciais.
+
 ## Render + Neon/PostgreSQL
 
 1. Criar banco PostgreSQL externo, por exemplo Neon.

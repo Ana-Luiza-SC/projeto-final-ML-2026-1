@@ -5,6 +5,8 @@
 > Status da tradução: sincronizada
 > Última sincronização: 2026-07-13
 
+> **Aviso de evolução:** a fatia original de autenticação restrita foi ampliada em `main` com cadastro público controlado por configuração. `ALLOW_REGISTRATION` é a autoridade do backend para habilitar ou desabilitar a criação de contas.
+
 ## Problema
 
 O armazenamento em memória perde disciplinas, avaliações, planos, faltas, conteúdos e associações ao reiniciar. As rotas acadêmicas também não possuem identidade de usuário. A consulta pública do SIGAA enriquece uma disciplina, mas ainda não há catálogo persistente separado das seleções pessoais.
@@ -20,6 +22,7 @@ O armazenamento em memória perde disciplinas, avaliações, planos, faltas, con
 ## Contratos
 
 - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`.
+- `GET /api/auth/registration-status` e `POST /api/auth/register`, condicionados a `ALLOW_REGISTRATION`.
 - `GET /api/catalog/components/{code}` e atualização sob demanda pelo fluxo SIGAA existente.
 - `POST /api/disciplines/{id}/complexity-analysis` analisa somente a disciplina escolhida, persiste resultado e aceita reanálise explícita.
 - Respostas acadêmicas existentes permanecem retrocompatíveis.
@@ -50,7 +53,8 @@ O armazenamento em memória perde disciplinas, avaliações, planos, faltas, con
 - A tentativa de abrir rota protegida sem sessão preserva o destino e leva a `/login`; após autenticação válida, o usuário retorna ao destino seguro.
 - A landing apresenta propósito, dor, funcionalidades atuais, calendário futuro explicitamente identificado como planejado, guardrails, fluxo em três passos e chamadas para entrar/criar conta.
 - O login oferece e-mail, senha, visibilidade da senha, validação acessível, loading e erros amigáveis; usuário autenticado em `/login` segue para a área privada.
-- O cadastro é somente uma interface informativa nesta iteração: valida localmente nome, e-mail, requisitos de senha, confirmação e aceite, mas não chama API, não cria usuário e não persiste credenciais.
+- O cadastro consulta `GET /api/auth/registration-status`; quando habilitado, `POST /api/auth/register` cria um usuário isolado e devolve o mesmo contrato de token do login.
+- Com `ALLOW_REGISTRATION=false`, o formulário completo não é oferecido e o login existente continua disponível.
 - Nenhuma credencial de demonstração é embutida no bundle; o responsável pelo ambiente fornece os valores configurados por `EMAIL_TESTE` e `SENHA_TESTE`.
 - Logout remove a sessão local e retorna a uma rota pública.
 - Layout público reutiliza tokens e tipografia existentes, com foco visível, labels, erros associados, contraste, responsividade e ausência de overflow horizontal.
@@ -66,14 +70,14 @@ O armazenamento em memória perde disciplinas, avaliações, planos, faltas, con
 - análise ocorre somente sob demanda e é reutilizada até reanálise;
 - banco SQLite e arquivos auxiliares de runtime não aparecem no status do Git;
 - landing pública, login e cadastro são acessíveis por `/`, `/login` e `/register`;
-- cadastro visual não realiza requisição nem persiste senha;
+- cadastro habilitado e desabilitado respeita a configuração do backend, normaliza e-mail e nunca persiste senha em texto puro;
 - rotas acadêmicas redirecionam visitantes para login e restauram o destino após autenticação;
 - scraper é testado apenas com fixtures;
 - suíte, frontend, Compose e smoke autenticado passam.
 
 ## Limitações
 
-Sem cadastro público, recuperação de senha, login social, calendário, sincronização integral no startup ou análise em lote do catálogo.
+Sem recuperação de senha, login social, rate limiting distribuído, sincronização integral no startup ou análise em lote do catálogo. O cadastro público pode ser desabilitado por ambiente. As limitações originais de calendário foram supersedidas pela Spec 013.
 
 ## Evidências de validação
 

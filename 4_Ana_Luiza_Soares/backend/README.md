@@ -58,6 +58,8 @@ Com a API rodando localmente, acesse:
 - ReDoc: http://localhost:8000/redoc
 - OpenAPI JSON: http://localhost:8000/openapi.json
 
+API publicada: https://projeto-final-ml-2026-1.onrender.com/docs
+
 ## Componentes curriculares públicos do SIGAA
 
 Endpoints disponíveis:
@@ -183,7 +185,6 @@ A frequência mínima é 75%. Faltas acima de 25% indicam risco grave ou reprova
 - PDFs são processados temporariamente e dependem de revisão humana; OCR não é garantido.
 - Não há sincronização com calendários externos, notificações, recuperação de senha ou login social.
 - O ciclo de atividade/timer e a adaptação pós-estudo das Specs 015/016 não estão implementados.
-- O branch `dev` não expõe registro público; `ALLOW_REGISTRATION` não ativa um endpoint neste checkout.
 
 ## Persistência, autenticação e catálogo local
 

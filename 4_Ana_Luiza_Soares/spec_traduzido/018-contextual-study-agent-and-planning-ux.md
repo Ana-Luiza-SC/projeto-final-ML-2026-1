@@ -55,4 +55,4 @@ Validar schemas, ownership, rota/IDs, evidência, datas/prazos, capacidade, conf
 
 Testes cobrem catálogo JSON, evidência de método, ação read-only até confirmação, idempotência, conflito novo, expiração/isolamento, prioridade/demanda, planejamento/capacidade, Month/Week, SIGAA dinâmico e fallback. Aceite requer UX unificada sem formulário duplicado, conceitos separados, confirmação humana, fallback completo e dados ausentes como incerteza.
 
-Limitações honestas: ciclo persistente de atividade/timer da Spec 015 é parcial; feedback/adaptação da Spec 016 é planejado; não há calendário externo/notificações/deploy público comprovado. No branch `dev`, cadastro público configurável não está implementado.
+Limitações honestas: ciclo persistente de atividade/timer da Spec 015 é parcial; feedback/adaptação da Spec 016 é planejado; não há calendário externo, notificações nem métricas operacionais consolidadas. Os endpoints públicos têm apenas verificação pontual HTTP; cadastro público depende de `ALLOW_REGISTRATION`.

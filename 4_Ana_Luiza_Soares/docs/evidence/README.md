@@ -10,7 +10,8 @@ Reviewed: 2026-07-13. Historical command results are labeled as repository evide
 - Fixture extraction evidence: sanitized SIGAA HTML fixtures and example PDFs under `pdf_exemple/`; these are test inputs, not production student evidence.
 - Screenshots: none found in the tracked documentation tree.
 - Deployment instructions: [`../deploy.md`](../deploy.md), `render.yaml`, Dockerfiles, and `docker-compose.yml`.
-- API contracts: FastAPI routes and generated `/docs`, `/redoc`, `/openapi.json`; canonical contracts are indexed in [`../../specs/README.md`](../../specs/README.md).
+- Public availability check (2026-07-13): the product at `https://name-estudaunb-frontend.onrender.com/` and Swagger at `https://projeto-final-ml-2026-1.onrender.com/docs` both returned HTTP 200. This is a point-in-time check, not an SLA or authenticated smoke test.
+- API contracts: FastAPI routes and generated `/docs`, `/redoc`, `/openapi.json`; the live Swagger is `https://projeto-final-ml-2026-1.onrender.com/docs` and canonical contracts are indexed in [`../../specs/README.md`](../../specs/README.md).
 - Fallback scenarios: agent, course-plan/content extraction, SIGAA, and planning tests.
 - Guardrail scenarios: schema/evidence, privacy, ownership, deadline, conflict, and confirmation tests.
 - Migrations: `backend/alembic/versions/001_persistence_catalog.py` and `002_academic_calendar.py`.
@@ -19,7 +20,7 @@ Reviewed: 2026-07-13. Historical command results are labeled as repository evide
 
 ## Evidence requiring manual production
 
-- Final deployment smoke test and verified application URL.
+- Final authenticated deployment smoke test, including database persistence and CORS.
 - Measured p50/p95 latency and error rate.
 - Fallback-rate summary and provider cost, if a provider is enabled.
 - Final guardrail/jailbreak evaluation report.

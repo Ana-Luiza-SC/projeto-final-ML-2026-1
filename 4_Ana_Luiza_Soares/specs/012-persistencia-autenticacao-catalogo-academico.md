@@ -31,7 +31,7 @@ In-memory storage lost disciplines, assessments, course plans, absences, content
 - PBKDF2 salted passwords; HMAC tokens with environment secret and expiry;
 - never log password, token, full prompt, or full syllabus;
 - mandatory `user_id` isolation;
-- `ALLOW_REGISTRATION` is reserved but inactive on `dev`; do not claim that it enables registration here;
+- `ALLOW_REGISTRATION` is the backend authority for enabling account creation; disabled registration must not affect existing login;
 - bounded/sanitized syllabus;
 - public scraper timeout, cache, limited retry, and authentication blocking;
 - complexity is an estimate, never objective difficulty, prerequisite, or exam content;

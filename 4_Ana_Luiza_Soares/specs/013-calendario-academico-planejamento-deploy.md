@@ -27,4 +27,4 @@ Specs 017/018 later moved availability and planning controls to `/study-plan`, a
 
 ## Maintained non-goals
 
-The implementation does not include Google Calendar, Outlook, notifications, email, push, drag-and-drop, collaboration, public sharing, professor scraping, a new ML model, password recovery, or social login. Public configuration-controlled registration is not present on this `dev` branch.
+The implementation does not include Google Calendar, Outlook, notifications, email, push, drag-and-drop, collaboration, public sharing, professor scraping, a new ML model, password recovery, or social login. Configuration-controlled public registration was added after this specification and is documented by Spec 012's evolution notice.

@@ -2,6 +2,13 @@
 
 EstudaUnB é um MVP para estudantes da Universidade de Brasília organizarem disciplinas, conteúdos, avaliações, faltas, calendário acadêmico e planejamento semanal de estudos. O projeto demonstra o ciclo agente → API → produto com guardrails, fallback determinístico e dados auditáveis.
 
+## Aplicação publicada
+
+- Produto: https://name-estudaunb-frontend.onrender.com/
+- API real (Swagger): https://projeto-final-ml-2026-1.onrender.com/docs
+
+Os dois endpoints responderam HTTP 200 na revisão de 2026-07-13. Serviços gratuitos do Render podem apresentar cold start no primeiro acesso.
+
 ## Produto
 
 Problema: estudantes precisam transformar PDFs, planos de ensino, avaliações e conteúdos em um plano de estudo viável, respeitando datas reais e regras acadêmicas da UnB.
@@ -10,7 +17,7 @@ Stakeholders: estudante, docente/orientador da disciplina de IA/ML e avaliadores
 
 Funcionalidades principais:
 
-- autenticação com usuário de demonstração por variáveis de ambiente; neste branch `dev`, o cadastro público permanece apenas informativo;
+- autenticação com usuário de demonstração e cadastro público controlado por configuração;
 - cadastro manual de disciplinas;
 - importação revisada de atestado de matrícula em PDF;
 - consulta opcional a componentes públicos do SIGAA;
@@ -193,7 +200,7 @@ As páginas autenticadas disponibilizam um drawer recolhível. O frontend envia 
 
 `POST /api/assistant/contextual/messages` é somente leitura. A resposta pode conter ações tipadas. Navegação não altera dados; propostas de mutação recebem um identificador temporário, expiram e só são executadas por `POST /api/assistant/actions/{action_id}/confirm`. Na confirmação, o backend verifica novamente usuário, preview, disciplina, intervalo, conflito e idempotência.
 
-Recomendações de métodos leem `backend/app/knowledge/study_methods/study_methods.json`, fonte canônica versionada. O PDF permanece fonte humana auditável e não é incorporado junto com o JSON na mesma coleção vetorial. Sem LLM, explicações, recomendações e ações seguras continuam disponíveis pelo modo determinístico.
+Recomendações de métodos leem diretamente `backend/app/knowledge/study_methods/study_methods.json`, fonte canônica versionada. O PDF `evidence_based_study_methods_rag.pdf` contém a versão humana auditável do mesmo catálogo. A base está preparada para uma evolução com recuperação/RAG, com um chunk por método e metadados versionados, mas o código atual não contém banco vetorial, embeddings ou pipeline de recuperação semântica em produção. Se esse pipeline for implementado, somente o JSON deve ser indexado; incorporar também o PDF duplicaria o conteúdo e distorceria o ranking. Sem LLM, explicações, recomendações e ações seguras continuam disponíveis pelo modo determinístico.
 
 ## Planejamento temporal
 
@@ -206,8 +213,7 @@ Datas são restrições rígidas no backend. Para conteúdos associados a avalia
 - O LLM é opcional; sem chave, a personalização usa fallback.
 - O frontend possui testes focados de cadastro; as demais telas ainda dependem principalmente de TypeScript/build.
 - O projeto não implementa rate limiting distribuído; produção deve aplicá-lo no proxy ou na plataforma.
-- O deploy real exige credenciais externas de Render/Neon e não é executado pelo repositório.
-- O cadastro controlado por configuração existe no branch `main`, mas não está presente neste checkout `dev`; a variável `ALLOW_REGISTRATION` é inativa aqui.
+- Os endpoints públicos estão ativos, mas métricas de disponibilidade, latência, custo e fallback ainda não foram consolidadas.
 
 ## Especificações, diagramas e relatório
 

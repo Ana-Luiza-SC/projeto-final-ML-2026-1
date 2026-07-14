@@ -5,6 +5,8 @@
 > Status da tradução: sincronizada
 > Última sincronização: 2026-07-13
 
+> **Evidência atual:** o produto e o Swagger públicos fornecidos responderam HTTP 200 em 2026-07-13. Essa verificação pontual não substitui smoke autenticado, SLA ou métricas operacionais; por isso o status canônico permanece `partial`.
+
 ## 1. Título
 
 Deploy, Docker, Monitoramento e Avaliação do EstudaUnB para entrega final.

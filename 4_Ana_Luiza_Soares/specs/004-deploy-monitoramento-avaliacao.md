@@ -7,7 +7,7 @@
 
 ## Goal and problem
 
-Make the MVP reproducible, demonstrable, reliable, and evaluable through Docker/Compose, environment configuration, safe logs, agent/API/UX evaluation, edge cases, and a demo script. Local deployment is required by this slice; public cloud deployment was optional. Current Render/Neon preparation comes from Spec 013, but no verified public deployment evidence exists.
+Make the MVP reproducible, demonstrable, reliable, and evaluable through Docker/Compose, environment configuration, safe logs, agent/API/UX evaluation, edge cases, and a demo script. Local deployment is required by this slice; public cloud deployment was optional. Render/Neon preparation comes from Spec 013, and the provided public frontend and Swagger URLs returned HTTP 200 on 2026-07-13. This point-in-time check is not an SLA or authenticated persistence smoke test.
 
 ## Local deployment
 
@@ -63,7 +63,7 @@ Exercise empty/invalid/oversized input, invalid `difficulty`/`status`, missing d
 
 ## Acceptance criteria and evidence expected
 
-Accept when Dockerfiles/Compose/config exist, services start, Swagger/front-to-back flow works, missing-key fallback remains complete, logs are safe, and evaluation is documented. Current repository has the files and historical local evidence, but measured operational metrics, public deployment smoke, final UX study, screenshots, and video are still missing; therefore status is `partial`.
+Accept when Dockerfiles/Compose/config exist, services start, Swagger/front-to-back flow works, missing-key fallback remains complete, logs are safe, and evaluation is documented. Current repository has the files, historical local evidence, and a public HTTP availability check, but measured operational metrics, authenticated deployment smoke, final UX study, screenshots, and video are still missing; therefore status is `partial`.
 
 ## Relationship
 
