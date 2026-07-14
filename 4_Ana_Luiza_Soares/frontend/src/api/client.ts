@@ -50,8 +50,11 @@ function authHeaders(): Record<string, string> {
 
 function friendlyError(status: number, detail: unknown): string {
   if (status === 401) return typeof detail === "string" ? detail : "Faça login novamente.";
+  if (status === 403) return typeof detail === "string" ? detail : "Esta operação não está disponível.";
   if (status === 404) return typeof detail === "string" ? detail : "Recurso não encontrado.";
   if (status === 409) return typeof detail === "string" ? detail : "A operação conflita com a hierarquia atual.";
+  if (status === 413) return "Os dados enviados excedem o limite permitido.";
+  if (status === 415) return "Formato de dados não aceito.";
   if (status === 400 || status === 422) {
     const detailText = typeof detail === "string" ? detail : "Verifique os dados informados.";
     if (detailText.toLowerCase().includes("nota")) return "Nota deve estar entre 0 e 10.";
@@ -300,7 +303,7 @@ export function setAssessmentContentAssociation(disciplineId: string, assessment
 export function previewContentExtraction(disciplineId: string) { return request<import("../types").ContentExtractionPreview>(`/api/disciplines/${disciplineId}/contents/extract-preview`, { method: "POST" }); }
 export function confirmContentExtraction(disciplineId: string, previewId: string, draftNodes: import("../types").ContentDraftNode[]) { return request<import("../types").ContentExtractionConfirmation>(`/api/disciplines/${disciplineId}/contents/confirm-preview`, { method: "POST", body: JSON.stringify({ preview_id: previewId, draft_nodes: draftNodes }) }); }
 
-export type AuthUser = { id: string; email: string };
+export type AuthUser = { id: string; email: string; display_name?: string | null };
 export type LoginResponse = { access_token: string; token_type: "bearer"; user: AuthUser };
 export type StudyDemandLevel = "insufficient_evidence" | "low" | "moderate" | "high";
 export type ComplexityAnalysis = {
@@ -329,6 +332,17 @@ export type ComplexityAnalysis = {
 };
 export async function login(email: string, password: string) {
   const result = await request<LoginResponse>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+  localStorage.setItem("estudaunb_token", result.access_token);
+  return result.user;
+}
+export function getRegistrationStatus() {
+  return request<{ enabled: boolean }>("/api/auth/registration-status");
+}
+export async function registerAccount(payload: { name: string; email: string; password: string; accepted_terms: true }) {
+  const result = await request<LoginResponse>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
   localStorage.setItem("estudaunb_token", result.access_token);
   return result.user;
 }

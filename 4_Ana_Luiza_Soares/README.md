@@ -58,7 +58,7 @@ Variáveis principais:
 - `DATABASE_URL`: `sqlite:///./data/estudaunb.db` local ou URL PostgreSQL/Neon em produção;
 - `AUTH_SECRET`: segredo longo para tokens;
 - `EMAIL_TESTE` e `SENHA_TESTE`: credenciais do usuário de demonstração;
-- `ALLOW_REGISTRATION=false`: cadastro público permanece desabilitado;
+- `ALLOW_REGISTRATION`: autoridade do backend para cadastro público; aceita `true`, `1`, `yes` e `on`;
 - `GOOGLE_API_KEY`: opcional;
 - `CORS_ORIGINS`: origens do frontend;
 - `VITE_API_URL`: URL pública do backend para o frontend.
@@ -126,7 +126,7 @@ Banco recomendado: Neon ou PostgreSQL compatível, informado por `DATABASE_URL`.
 
 Backend no Render:
 
-- configurar `DATABASE_URL`, `AUTH_SECRET`, `EMAIL_TESTE`, `SENHA_TESTE`, `CORS_ORIGINS`;
+- configurar `DATABASE_URL`, `AUTH_SECRET`, `EMAIL_TESTE`, `SENHA_TESTE`, `ALLOW_REGISTRATION=true`, `CORS_ORIGINS`;
 - opcionalmente configurar `GOOGLE_API_KEY`;
 - health check: `/api/health`;
 - startup executa `alembic upgrade head`;
@@ -140,6 +140,12 @@ Frontend no Render:
 - fallback SPA: rewrite `/*` para `/index.html`.
 
 Limitações de serviços gratuitos: cold start, banco pode dormir, latência maior no primeiro acesso e limites de conexão.
+
+## Autenticação e cadastro
+
+`GET /api/auth/registration-status` é a única fonte de verdade para o frontend decidir se exibe o formulário. `POST /api/auth/register` exige nome, e-mail válido, senha com no mínimo oito caracteres, maiúscula, minúscula e número, além do aceite dos termos. Em caso de sucesso, o backend cria um usuário ativo, devolve o mesmo contrato de token do login e o frontend autentica a nova conta.
+
+E-mails são normalizados e protegidos por índice único; senhas usam PBKDF2-SHA256 com salt e nunca são persistidas em texto puro. Defina `ALLOW_REGISTRATION=false` para bloquear novas contas sem afetar login ou o usuário de demonstração. Nenhuma variável `VITE_*` controla essa decisão.
 
 ## Agente
 
@@ -196,5 +202,6 @@ Datas são restrições rígidas no backend. Para conteúdos associados a avalia
 - Não há integração com Google Calendar, e-mail ou notificações.
 - Preview de extração de eventos usa dados estruturados do plano confirmado; sem plano confirmado, o sistema orienta o usuário e não salva nada.
 - O LLM é opcional; sem chave, a personalização usa fallback.
-- O frontend não possui testes automatizados extensos além de TypeScript/build.
+- O frontend possui testes focados de cadastro; as demais telas ainda dependem principalmente de TypeScript/build.
+- O projeto não implementa rate limiting distribuído; produção deve aplicá-lo no proxy ou na plataforma.
 - O deploy real exige credenciais externas de Render/Neon e não é executado pelo repositório.

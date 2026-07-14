@@ -15,7 +15,7 @@ services:
       - key: SENHA_TESTE
         sync: false
       - key: ALLOW_REGISTRATION
-        value: false
+        value: true
       - key: LLM_PROVIDER
         value: google
       - key: LLM_MODEL

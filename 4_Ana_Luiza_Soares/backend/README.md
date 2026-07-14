@@ -189,7 +189,7 @@ A frequência mínima é 75%. Faltas acima de 25% indicam risco grave ou reprova
 
 Os dados acadêmicos usam SQLAlchemy e `DATABASE_URL` (resolvido para `backend/data/estudaunb.db` por padrão, independentemente do diretório de execução). Execute `alembic upgrade head` antes da API. O Compose usa um volume SQLite persistente; PostgreSQL pode ser selecionado por URL sem alterar os serviços.
 
-O cadastro público não existe no MVP. Na inicialização, `EMAIL_TESTE` e `SENHA_TESTE` criam ou atualizam idempotentemente o usuário restrito; `AUTH_SECRET` assina sessões HMAC. Senhas usam PBKDF2-SHA256 com salt e nunca são registradas.
+O cadastro público é controlado por `ALLOW_REGISTRATION`; `true`, `1`, `yes` e `on` habilitam novas contas, enquanto qualquer outro valor mantém o cadastro fechado. `GET /api/auth/registration-status` expõe somente esse estado. `POST /api/auth/register` cria usuário ativo com nome de exibição, e-mail normalizado e senha PBKDF2-SHA256, retornando o mesmo token HMAC do login. Na inicialização, `EMAIL_TESTE` e `SENHA_TESTE` continuam criando ou atualizando apenas o usuário de demonstração configurado.
 
 A busca pública do SIGAA mantém sessão JSF/ViewState, timeout, repetição limitada e intervalo entre consultas. Resultados enriquecidos são sanitizados e gravados com upsert em `catalog_components`; disciplinas do estudante apenas referenciam/copiam os metadados acadêmicos, sem apagar avaliações ou conteúdos. `POST /api/disciplines/{id}/complexity-analysis` analisa somente a disciplina solicitada e persiste o resultado, com fallback auditável.
 

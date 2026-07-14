@@ -148,6 +148,7 @@ export default function App() {
       <RegisterPage
         onHome={() => navigate({ page: "landing" })}
         onLogin={() => navigate({ page: "login" })}
+        onRegistered={handleLogin}
       />
     );
   if (route.page === "login") {

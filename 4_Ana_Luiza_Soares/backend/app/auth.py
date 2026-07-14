@@ -3,10 +3,25 @@ import base64, hashlib, hmac, json, os
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from app.database import SessionLocal, User, utc_now
 
 ITERATIONS = 310000
+REGISTRATION_TRUE_VALUES = {"true", "1", "yes", "on"}
+
+
+class DuplicateEmailError(ValueError):
+    pass
+
+
+def registration_enabled():
+    return (
+        os.getenv("ALLOW_REGISTRATION", "")
+        .strip()
+        .casefold()
+        in REGISTRATION_TRUE_VALUES
+    )
 
 
 def _b64(v):
@@ -90,6 +105,25 @@ def ensure_user(email, password, user_id=None, update_password=False):
         s.commit()
         s.expunge(user)
         return user
+
+
+def register_user(display_name, email, password):
+    user = User(
+        id=str(uuid4()),
+        email=email.strip().casefold(),
+        display_name=display_name.strip(),
+        password_hash=hash_password(password),
+        is_active=True,
+    )
+    with SessionLocal() as s:
+        s.add(user)
+        try:
+            s.commit()
+        except IntegrityError as exc:
+            s.rollback()
+            raise DuplicateEmailError("E-mail já cadastrado.") from exc
+        s.expunge(user)
+    return user
 
 
 def bootstrap_test_user():

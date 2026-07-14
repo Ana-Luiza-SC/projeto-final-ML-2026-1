@@ -78,9 +78,9 @@ export function LoginPage({ onLogin, onHome, onRegister }: Props) {
         >
           <div>
             <p className="eyebrow">Entrar</p>
-            <h2>Use seu acesso de demonstração</h2>
+            <h2>Entre com sua conta</h2>
             <p className="muted">
-              As credenciais são fornecidas pelo responsável pelo ambiente.
+              Use o e-mail e a senha cadastrados neste ambiente.
             </p>
           </div>
           <label htmlFor="login-email">E-mail</label>

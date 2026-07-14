@@ -111,7 +111,7 @@ export function AppShell({
           Assistente
         </button>
         <div className="user-session">
-          <span>{user.email}</span>
+          <span>{user.display_name || user.email}</span>
           <button className="secondary-button" onClick={onLogout}>
             Sair
           </button>

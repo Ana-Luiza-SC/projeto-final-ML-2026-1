@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,6 +25,77 @@ from app.routers.calendar import router as calendar_router
 from app.routers.contextual_assistant import router as contextual_assistant_router
 from app.auth import bootstrap_test_user, decode_token, ensure_user, get_user
 from app.database import current_user_id, init_database
+
+REGISTRATION_MAX_BODY_BYTES = 16 * 1024
+
+
+class RegistrationRequestGuard:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(
+        self,
+        scope: dict[str, Any],
+        receive: Callable[[], Awaitable[dict[str, Any]]],
+        send: Callable[[dict[str, Any]], Awaitable[None]],
+    ):
+        if (
+            scope["type"] != "http"
+            or scope.get("path") != "/api/auth/register"
+            or scope.get("method") != "POST"
+        ):
+            await self.app(scope, receive, send)
+            return
+        headers = {
+            key.decode("latin-1").casefold(): value.decode("latin-1")
+            for key, value in scope.get("headers", [])
+        }
+        if headers.get("content-type", "").split(";", 1)[0].strip().casefold() != (
+            "application/json"
+        ):
+            await JSONResponse(
+                status_code=415,
+                content={"detail": "Envie os dados como application/json."},
+            )(scope, receive, send)
+            return
+        content_length = headers.get("content-length")
+        if content_length and content_length.isdigit():
+            if int(content_length) > REGISTRATION_MAX_BODY_BYTES:
+                await JSONResponse(
+                    status_code=413,
+                    content={"detail": "Os dados de cadastro excedem o limite permitido."},
+                )(scope, receive, send)
+                return
+        messages = []
+        total = 0
+        while True:
+            message = await receive()
+            messages.append(message)
+            if message.get("type") == "http.request":
+                total += len(message.get("body", b""))
+                if total > REGISTRATION_MAX_BODY_BYTES:
+                    await JSONResponse(
+                        status_code=413,
+                        content={
+                            "detail": "Os dados de cadastro excedem o limite permitido."
+                        },
+                    )(scope, receive, send)
+                    return
+                if not message.get("more_body", False):
+                    break
+            elif message.get("type") == "http.disconnect":
+                return
+        position = 0
+
+        async def replay():
+            nonlocal position
+            if position < len(messages):
+                message = messages[position]
+                position += 1
+                return message
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        await self.app(scope, replay, send)
 
 
 @asynccontextmanager
@@ -75,11 +149,29 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def safe_request_validation_error(
+    _request: Request,
+    exc: RequestValidationError,
+):
+    details = []
+    for error in exc.errors():
+        safe_error = {
+            key: value
+            for key, value in error.items()
+            if key not in {"input", "ctx"}
+        }
+        details.append(safe_error)
+    return JSONResponse(status_code=422, content={"detail": details})
+
+
 @app.middleware("http")
 async def authenticated_student_context(request: Request, call_next):
     public = request.url.path in {
         "/api/health",
         "/api/auth/login",
+        "/api/auth/register",
+        "/api/auth/registration-status",
         "/docs",
         "/redoc",
         "/openapi.json",
@@ -138,6 +230,7 @@ def _cors_origins() -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+app.add_middleware(RegistrationRequestGuard)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),

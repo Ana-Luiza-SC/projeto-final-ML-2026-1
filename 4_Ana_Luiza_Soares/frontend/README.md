@@ -90,7 +90,7 @@ Depois clique em `Gerar recomendação de estudo`. O backend funciona sem `GOOGL
 
 ## Limitações
 
-- Autenticação restrita ao usuário configurado no backend; cadastro público desabilitado.
+- Cadastro público depende exclusivamente de `GET /api/auth/registration-status`; nenhuma variável Vite controla a autorização.
 - Sem calendário nesta etapa.
 - Importações de documentos sempre exigem revisão humana antes da persistência.
 - Agente disponível via backend; sem `GOOGLE_API_KEY`, usa fallback por regras.
@@ -100,8 +100,8 @@ Depois clique em `Gerar recomendação de estudo`. O backend funciona sem `GOOGL
 ## Rotas públicas e sessão
 
 - `/` é a landing page pública do EstudaUnB.
-- `/login` autentica com o usuário de demonstração configurado no backend.
-- `/register` valida o formulário somente no navegador e informa que o cadastro público está indisponível; não chama API nem persiste credenciais.
+- `/login` autentica contas existentes, incluindo o usuário de demonstração configurado no backend.
+- `/register` consulta o estado do backend e, quando habilitado, cria e autentica uma conta.
 - `/app`, `/disciplines`, `/study-plan` e `/matricula-import` são rotas protegidas.
 
-Use `ALLOW_REGISTRATION=false` no backend. O usuário de demonstração é criado por `EMAIL_TESTE` e `SENHA_TESTE`; não inclua os valores reais em código, HTML, logs ou documentação.
+Use `ALLOW_REGISTRATION=false` no backend para impedir novas contas. O usuário de demonstração é criado por `EMAIL_TESTE` e `SENHA_TESTE`; não inclua os valores reais em código, HTML, logs ou documentação.
