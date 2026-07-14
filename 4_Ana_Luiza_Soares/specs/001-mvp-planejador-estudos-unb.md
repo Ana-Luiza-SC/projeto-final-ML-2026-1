@@ -1,185 +1,54 @@
+# Spec 001 — EstudaUnB MVP
 
-# Spec 001 — MVP EstudaUnB
+> Canonical language: English
+> Translation: [../spec_traduzido/001-mvp-planejador-estudos-unb.md](../spec_traduzido/001-mvp-planejador-estudos-unb.md)
+> Status: partial
+> Last reviewed: 2026-07-13
 
-## Nome
+## Title and context
 
-EstudaUnB — Agente de Planejamento Acadêmico para Estudantes da UnB
+EstudaUnB — Academic Planning Agent for UnB Students. The product helps a learner organize disciplines, content, assessments, grades, attendance, and study actions from fragmented SIGAA, PDF, note, and calendar information.
 
-## Objetivo
+## Problem statement and stakeholders
 
-Construir uma plataforma web simples que ajude estudantes da Universidade de Brasília a organizar disciplinas, conteúdos, avaliações e metas de nota.
+The central problem is turning a schedule and assessments into an actionable, auditable study plan. Stakeholders are UnB students, the evaluating course team, and project developers. The primary user is a currently enrolled UnB student.
 
-O sistema deve importar disciplinas a partir de um PDF de atestado de matrícula do SIGAA ou permitir cadastro manual. Depois disso, o estudante poderá registrar conteúdos, avaliações e notas. Um agente de IA irá classificar a dedicação recomendada por disciplina e sugerir ações de estudo.
+## Goals and success criteria
 
-## Problema
+A learner should import or manually register at least one discipline, add an assessment, and receive a study recommendation in under five minutes. Historical target metrics defined by this spec were: at least 80% correct code/name/schedule extraction over the test PDF set; recommendation API average below 10 seconds; friendly handling of all invalid inputs; manual fallback for PDF/scraping failure; and logging of latency, error, and fallback. These are targets, not measured final results.
 
-Estudantes da UnB frequentemente precisam lidar com várias disciplinas, avaliações, trabalhos, leituras e metas de aprovação ao mesmo tempo. A organização costuma ficar distribuída entre SIGAA, PDFs, anotações pessoais e calendários manuais.
+## MVP scope
 
-A dor principal é transformar a grade e as avaliações em um plano de estudo acionável.
+1. Enrollment-certificate PDF upload, extraction preview, and human review.
+2. Manual discipline registration fallback.
+3. Study-content, assessment, weight, and grade registration.
+4. Deterministic partial average and required-grade calculations.
+5. AI-assisted dedication classification and weekly study recommendations.
+6. Friendly fallback when PDF, public scraping, or AI fails.
 
-## Stakeholders
+## Non-goals
 
-- Estudantes da UnB.
-- Equipe da disciplina avaliadora.
-- Desenvolvedores do projeto.
+No SIGAA login/authenticated scraping, professor failure history/rating, Google Calendar, native mobile app, complex trained prediction model, or permanent raw-PDF storage. The original complete monthly/daily-calendar non-goal was superseded by Specs 013, 017, and 018.
 
-## Usuário principal
+## Data sources and privacy
 
-Estudante da UnB matriculado em disciplinas no semestre atual.
+Allowed inputs are learner-uploaded enrollment PDF, manually entered disciplines, study content, assessments/weights/grades, and target average. External data is limited to public SIGAA/UnB component and, when technically viable, public turma pages. Do not depend on unconfirmed professor failure-rate data. Raw enrollment PDFs are not stored by default.
 
-## Métrica de sucesso de negócio
+## Domain model
 
-Um estudante consegue importar ou cadastrar ao menos uma disciplina, registrar uma avaliação e receber uma recomendação de estudo em menos de 5 minutos.
+- `Discipline`: `id`, `code`, `name`, `class_code`, `professor`, `schedule`, `syllabus`, `source_url`, timestamps.
+- `StudyTopic`: discipline, title, description, `status` (`not_started`, `in_progress`, `reviewed`), `difficulty` (`low`, `medium`, `high`), due date.
+- `Assessment`: discipline, name, weight, grade, date, topics.
+- `GradeSimulation`: current average, completed/remaining weight, target and required remaining average, risk.
+- `StudyRecommendation`: discipline, dedication, confidence, evidence reasons, actions, timestamp.
 
-## Métricas técnicas
+Later specs refine `StudyTopic` into hierarchical `ContentNode`, introduce `academic_events`, and distinguish planned study blocks from actual study activities.
 
-- Parsing do PDF extrai corretamente código, nome e horário da disciplina em pelo menos 80% dos PDFs de teste.
-- API de recomendação responde em menos de 10 segundos em média.
-- 100% das entradas inválidas retornam erro amigável.
-- Sistema possui fallback manual quando PDF ou scraping falhar.
-- Sistema registra latência, erros e fallback acionado.
+## API contracts
 
-## Escopo do MVP
+Historical minimum endpoints were PDF import, confirm import, discipline CRUD, topics, assessments, grade simulation, and `POST /api/agent/study-recommendation`. Current routes are authoritative where names evolved; see OpenAPI and later specs.
 
-O sistema deve permitir:
-
-1. Upload de PDF de atestado de matrícula.
-2. Extração preliminar de disciplinas do PDF.
-3. Tela de revisão dos dados extraídos.
-4. Cadastro manual de disciplina.
-5. Cadastro de conteúdos a estudar por disciplina.
-6. Cadastro de avaliações, pesos e notas.
-7. Cálculo de média parcial.
-8. Cálculo de nota necessária para atingir média alvo.
-9. Classificação de dedicação recomendada por IA.
-10. Geração de recomendação semanal de estudo.
-11. Fallback amigável quando PDF, scraping ou IA falhar.
-
-## Fora do escopo
-
-- Login com SIGAA.
-- Scraping de área autenticada.
-- Taxa histórica de aprovação/reprovação por professor.
-- Integração com Google Calendar.
-- Aplicativo mobile.
-- Modelo preditivo treinado complexo.
-- Calendário mensal/diário completo.
-- Armazenamento permanente do PDF bruto.
-
-## Fontes de dados
-
-### Dados fornecidos pelo usuário
-
-- PDF de atestado de matrícula.
-- Disciplinas cadastradas manualmente.
-- Conteúdos a estudar.
-- Avaliações, pesos e notas.
-- Meta de média final.
-
-### Dados públicos externos
-
-- Página pública de componentes curriculares do SIGAA/UnB.
-- Página pública de turmas do SIGAA/UnB, se tecnicamente viável.
-
-O sistema não deve depender de dados históricos de reprovação/aprovação por professor, pois essa fonte ainda não foi confirmada.
-
-## Entidades principais
-
-### Discipline
-
-Campos:
-- id
-- code
-- name
-- class_code
-- professor
-- schedule
-- syllabus
-- source_url
-- created_at
-- updated_at
-
-### StudyTopic
-
-Campos:
-- id
-- discipline_id
-- title
-- description
-- status
-- difficulty
-- due_date
-
-Status possíveis:
-- not_started
-- in_progress
-- reviewed
-
-Dificuldade:
-- low
-- medium
-- high
-
-### Assessment
-
-Campos:
-- id
-- discipline_id
-- name
-- weight
-- grade
-- date
-- topics
-
-### GradeSimulation
-
-Campos:
-- discipline_id
-- current_average
-- completed_weight
-- remaining_weight
-- target_average
-- required_average_on_remaining
-- risk_level
-
-### StudyRecommendation
-
-Campos:
-- discipline_id
-- dedication_level
-- confidence
-- reasons
-- recommended_actions
-- generated_at
-
-## Endpoints mínimos
-
-### POST /api/import/matricula-pdf
-
-Recebe PDF e retorna disciplinas extraídas.
-
-Não deve salvar automaticamente no banco.
-
-Resposta esperada:
-
-```json
-{
-  "status": "success",
-  "disciplines": [
-    {
-      "code": "FGA0000",
-      "name": "Nome da Disciplina",
-      "class_code": "01",
-      "professor": "Nome do Professor",
-      "schedule": "SEG 10:00-11:50"
-    }
-  ],
-  "warnings": []
-}
-
-```
-
-Se falhar:
+PDF failure must remain friendly and identify manual entry:
 
 ```json
 {
@@ -187,213 +56,38 @@ Se falhar:
   "message": "Não foi possível extrair disciplinas do PDF. Cadastre manualmente.",
   "fallback": "manual_entry"
 }
-
 ```
 
-### POST /api/disciplines/confirm-import
+The recommendation receives a `discipline_id` and `target_average` and returns `dedication_level`, `confidence`, evidence-based `reasons`, and `recommended_actions`. Literal Portuguese UI strings remain Portuguese.
 
-Salva disciplinas confirmadas pelo usuário.
+## UnB academic rules
 
-### POST /api/disciplines
+- Mentions are SS, MS, MM, MI, II, and SR; SS/MS/MM pass and MI/II/SR fail.
+- Minimum attendance is 75%; absence above 25% is serious failure risk.
+- Attendance risk must be reported even with a good grade.
+- Do not assert final approval when attendance is unknown.
+- Grade, mention, and attendance calculations are deterministic; an AI explains/recommends but does not freely calculate them.
 
-Cadastra disciplina manualmente.
-
-### GET /api/disciplines
-
-Lista disciplinas cadastradas.
-
-### GET /api/disciplines/{id}
-
-Mostra detalhes de uma disciplina.
-
-### POST /api/disciplines/{id}/topics
-
-Cadastra conteúdo de estudo.
-
-### POST /api/disciplines/{id}/assessments
-
-Cadastra avaliação.
-
-### GET /api/disciplines/{id}/grade-simulation
-
-Calcula média, nota necessária e risco.
-
-### POST /api/agent/study-recommendation
-
-Gera classificação de dedicação e recomendação de estudo.
-
-Entrada:
-
-```json
-{
-  "discipline_id": "uuid",
-  "target_average": 6.0
-}
-
-```
-
-Saída:
-
-```json
-{
-  "dedication_level": "high",
-  "confidence": 0.78,
-  "reasons": [
-    "A próxima avaliação tem peso alto.",
-    "Há conteúdos pendentes marcados como difíceis.",
-    "A nota necessária restante está acima da média alvo."
-  ],
-  "recommended_actions": [
-    "Priorizar os conteúdos pendentes da próxima avaliação.",
-    "Reservar sessões curtas de revisão ao longo da semana."
-  ]
-}
-```
-
-
-
-## Regras acadêmicas da UnB
-
-- A UnB usa menções SS, MS, MM, MI, II e SR.
-- Menções de aprovação: SS, MS e MM.
-- Menções de reprovação: MI, II e SR.
-- Frequência mínima exigida: 75%.
-- Faltas acima de 25% indicam risco grave ou reprovação por falta.
-- O sistema deve alertar risco por falta mesmo quando a nota estiver boa.
-- O sistema não deve afirmar aprovação final se a frequência for desconhecida.
-- O cálculo de nota, menção e frequência é determinístico.
-- O agente de IA deve explicar e recomendar, mas não calcular livremente nota/frequência.
-- O sistema deve demonstrar o ciclo agente → API → produto.
-- PDFs de atestado de matrícula não devem ser armazenados por padrão.
-- O cadastro manual de disciplinas é fallback obrigatório.
-- Scraping deve ser apenas de páginas públicas, futuramente.
-
-## Regras de cálculo de nota
-
-A média parcial deve ser calculada como:
+The historical formulas are:
 
 ```text
-media_parcial = soma(nota * peso) / soma(pesos_concluidos)
+partial_average = sum(grade * weight) / sum(completed_weights)
+current_contribution = sum(grade * weight)
+required_remaining = (target_average - current_contribution) / remaining_weight
 ```
 
-A contribuição atual na nota final deve ser:
+Normalize percentage weights to 0–1. Validate grades from 0–10 and weights from 0–100%. Historical grade-risk bands were low at required ≤ 6, medium at > 6 and ≤ 8, and high above 8; imminent high-weight assessments or many difficult pending topics may add recommendation urgency.
 
-```text
-contribuicao_atual = soma(nota * peso)
-```
+## Agent responsibilities, guardrails, and fallback
 
-A nota média necessária nas avaliações restantes deve ser:
+Use pending content, learner-specific difficulty, confirmed assessment dates/weights, deterministic academic results, and public syllabus/workload when present. Return dedication, confidence, reasons, and actions; declare missing evidence. Do not invent SIGAA data, rates, dates, grades, content, or professor assessments.
 
-```text
-necessaria_restante = (media_alvo - contribuicao_atual) / peso_restante
-```
+Reject empty/non-PDF input, invalid disciplines, weights, and grades. If PDF parsing fails, keep manual entry; if SIGAA fails, keep the discipline without invented syllabus; if AI fails, use deterministic rules; if calculation lacks fields, name them.
 
-Assumir pesos em escala de 0 a 1 ou normalizar se vierem como porcentagem.
+## Frontend and acceptance criteria
 
-## Regras de risco acadêmico
+The original pages were Home, Import, Disciplines, and Discipline Detail. Later specs add protected planning/calendar/assistant surfaces. Acceptance requires runnable backend/frontend, manual discipline entry, PDF extraction preview with edit/confirm, assessment entry, deterministic simulation, explained recommendation, invalid-PDF fallback, SIGAA-independent operation, and Docker/Compose execution. Cloud deployment, measured targets, Spec 015 activity lifecycle, and Spec 016 feedback adaptation remain incomplete, so the overall foundation is `partial`.
 
-Risco baixo:
+## Relationship to other specs
 
-* nota necessária restante <= 6.0
-
-Risco médio:
-
-* nota necessária restante > 6.0 e <= 8.0
-
-Risco alto:
-
-* nota necessária restante > 8.0
-* ou avaliação próxima com peso alto
-* ou muitos conteúdos pendentes difíceis
-
-## Regras do agente
-
-O agente deve considerar:
-
-* conteúdos pendentes;
-* dificuldade dos conteúdos;
-* datas de avaliações;
-* peso das avaliações;
-* média atual;
-* nota necessária;
-* ementa, se disponível;
-* carga horária, se disponível.
-
-O agente deve retornar:
-
-* dedicação recomendada;
-* confiança;
-* motivos;
-* ações recomendadas.
-
-O agente deve declarar incerteza quando dados importantes estiverem ausentes.
-
-## Guardrails
-
-Entrada:
-
-* rejeitar PDF vazio;
-* rejeitar arquivo que não seja PDF;
-* rejeitar disciplina sem nome ou código;
-* validar pesos entre 0 e 100%;
-* validar notas entre 0 e 10.
-
-Saída:
-
-* não inventar dados do SIGAA;
-* não afirmar taxas históricas;
-* não avaliar professor;
-* não gerar recomendação se não houver dados mínimos;
-* sempre retornar justificativa.
-
-## Fallbacks
-
-* Se PDF falhar: cadastro manual.
-* Se scraping SIGAA falhar: disciplina fica sem ementa, mas sistema continua.
-* Se IA falhar: usar recomendação baseada em regras.
-* Se cálculo de nota não for possível: mostrar campos faltantes.
-
-## Interface mínima
-
-Páginas:
-
-1. Home
-
-   * explicar o objetivo do sistema;
-   * botão para importar PDF;
-   * botão para cadastrar disciplina manualmente.
-
-2. Importação
-
-   * upload do PDF;
-   * prévia dos dados extraídos;
-   * botão confirmar;
-   * opção editar campos.
-
-3. Disciplinas
-
-   * lista de disciplinas;
-   * risco/dedicação por disciplina.
-
-4. Detalhe da disciplina
-
-   * dados básicos;
-   * ementa, se encontrada;
-   * conteúdos;
-   * avaliações;
-   * simulação de nota;
-   * recomendação da IA.
-
-## Critérios de aceite
-
-* O backend sobe localmente.
-* O frontend sobe localmente.
-* O usuário consegue cadastrar disciplina manualmente.
-* O usuário consegue enviar PDF e ver tentativa de extração.
-* O usuário consegue confirmar ou editar disciplinas extraídas.
-* O usuário consegue cadastrar avaliação com peso e nota.
-* O sistema calcula média e nota necessária.
-* O agente retorna recomendação explicada.
-* O sistema possui fallback para PDF inválido.
-* O sistema não quebra se o SIGAA estiver indisponível.
-* O projeto roda com Docker ou docker-compose.
+Specs 002–013 implement/refine the MVP domains. Specs 014, 017, and 018 supersede manual priority and rigid generated-session planning. Spec 015 is partial and Spec 016 is planned.

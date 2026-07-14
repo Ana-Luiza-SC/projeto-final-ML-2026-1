@@ -1,5 +1,10 @@
 # Spec 015 - Study Method Catalog and On-Demand Study Flow
 
+> Canonical language: English
+> Translation: [../spec_traduzido/015-study-method-catalog-and-on-demand-study.md](../spec_traduzido/015-study-method-catalog-and-on-demand-study.md)
+> Status: partial
+> Last reviewed: 2026-07-13
+
 ## Problem statement
 
 The product should not force a pre-scheduled study session. After the weekly agenda identifies what deserves attention, the learner should manually start a study activity when ready.

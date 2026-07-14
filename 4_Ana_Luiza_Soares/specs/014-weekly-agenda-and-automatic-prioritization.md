@@ -1,5 +1,12 @@
 # Spec 014 - Weekly Agenda and Automatic Study Prioritization
 
+> Canonical language: English
+> Translation: [../spec_traduzido/014-weekly-agenda-and-automatic-prioritization.md](../spec_traduzido/014-weekly-agenda-and-automatic-prioritization.md)
+> Status: superseded
+> Last reviewed: 2026-07-13
+
+> **Relationship notice:** Spec 017 supersedes the unscheduled-only planning direction with previewed and confirmed planned study blocks. Spec 018 is canonical for the current planning UX. Automatic deterministic priority remains authoritative.
+
 ## Problem statement
 
 The current product can store academic events and generate weekly study sessions. That model is too rigid for the next product direction because it turns recommendations into a pre-scheduled calendar that the learner may not actually follow.

@@ -1,21 +1,30 @@
-# Spec 013 — Calendário acadêmico, planejamento temporal e preparação para deploy
+# Spec 013 — Academic Calendar, Temporal Planning, and Deployment Preparation
 
-## Objetivo
+> Canonical language: English
+> Translation: [../spec_traduzido/013-calendario-academico-planejamento-deploy.md](../spec_traduzido/013-calendario-academico-planejamento-deploy.md)
+> Status: implemented
+> Last reviewed: 2026-07-13
 
-Implementar a última grande iteração do MVP EstudaUnB antes da entrega: calendário acadêmico persistente, eventos de avaliações, extração assistida de eventos do plano de ensino com revisão humana, visualização mensal/semanal, correção de restrições temporais do planejamento, seed de demonstração, preparação para deploy e documentação/evidências.
+> **Relationship notice:** The separate weekly-agenda presentation and generated-session terminology were refined by Specs 017 and 018. Month and Week calendar views now display confirmed planned study blocks; planning input belongs on `/study-plan`.
 
-## Escopo P0 implementado
+## Goal
 
-- Entidade persistente `academic_events`, isolada por usuário.
-- CRUD autenticado do calendário.
-- Sincronização idempotente avaliação → evento.
-- Preview de eventos extraídos do plano confirmado e confirmação humana antes de persistir.
-- Tela protegida `/calendar` com calendário mensal, filtros, criação manual, preview de extração e agenda semanal.
-- Planejamento semanal com referência temporal explícita em `America/Sao_Paulo`.
-- Seed idempotente de demonstração com cenário terça/quinta e disciplina sem avaliação datada.
-- Preparação de Docker/Render/Neon via variáveis de ambiente, health check e migrations.
-- Testes direcionados e documentação de evidências.
+Implement the last major pre-delivery MVP iteration: persistent academic calendar, assessment events, assisted extraction of course-plan events with human review, Month/Week visualization, temporal planning corrections, demo seed, deployment preparation, and evidence documentation.
 
-## Fora do escopo mantido
+## Implemented P0 scope
 
-Não foram implementados Google Calendar, Outlook, notificações, e-mail, push, drag-and-drop, colaboração, compartilhamento público, scraping docente, novo modelo de ML, cadastro público funcional, recuperação de senha ou login social.
+- owner-isolated persistent `academic_events` entity;
+- authenticated calendar CRUD;
+- idempotent assessment-to-event synchronization;
+- preview of events extracted from a confirmed course plan, with human confirmation before persistence;
+- protected `/calendar` with Month/Week views, filters, manual creation, and extraction preview;
+- weekly planning with explicit `America/Sao_Paulo` temporal reference;
+- idempotent demonstration seed with Tuesday/Thursday scenario and an undated discipline;
+- Docker/Render/Neon preparation through environment variables, health check, and migrations;
+- targeted tests and evidence documentation.
+
+Specs 017/018 later moved availability and planning controls to `/study-plan`, added recurrence and confirmed planned study blocks, and removed the duplicated planning agenda from `/calendar`.
+
+## Maintained non-goals
+
+The implementation does not include Google Calendar, Outlook, notifications, email, push, drag-and-drop, collaboration, public sharing, professor scraping, a new ML model, password recovery, or social login. Public configuration-controlled registration is not present on this `dev` branch.

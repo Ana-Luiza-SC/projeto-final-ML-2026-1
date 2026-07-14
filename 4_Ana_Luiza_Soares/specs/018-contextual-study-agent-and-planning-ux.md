@@ -1,5 +1,10 @@
 # Spec 018 - Contextual Study Agent and Planning UX
 
+> Canonical language: English
+> Translation: [../spec_traduzido/018-contextual-study-agent-and-planning-ux.md](../spec_traduzido/018-contextual-study-agent-and-planning-ux.md)
+> Status: implemented
+> Last reviewed: 2026-07-13
+
 ## Status and purpose
 
 This specification defines one coherent planning, calendar, study-demand, and contextual-assistant experience for EstudaUnB. It supersedes the frontend information architecture introduced incrementally by Specs 007, 013, and 017 while preserving their compatible backend data and backward-compatibility requirements.
@@ -413,11 +418,11 @@ Week:
             Mon 13   Tue 14   Wed 15   Thu 16   Fri 17   Sat   Sun
 All day     -----    Exam     -----    -----    -----    ---   ---
 07:00  -------------------------------------------------------------
-08:00            | Class |                                            
-09:00            |       |                                            
+08:00            | Class |
+09:00            |       |
 10:00  -------------------------------------------------------------
-18:00  | Study |            | Study |                                 
-19:00  |       |            |       |                                 
+18:00  | Study |            | Study |
+19:00  |       |            |       |
 20:00  -------------------------------------------------------------
 ```
 

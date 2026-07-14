@@ -1,5 +1,10 @@
 # Spec 016 - Study Feedback and Method Adaptation
 
+> Canonical language: English
+> Translation: [../spec_traduzido/016-study-feedback-and-method-adaptation.md](../spec_traduzido/016-study-feedback-and-method-adaptation.md)
+> Status: planned
+> Last reviewed: 2026-07-13
+
 ## Problem statement
 
 After a learner completes a study activity, the product needs a short evaluation that can improve future method recommendations. This adaptation must be deterministic, auditable and cautious.

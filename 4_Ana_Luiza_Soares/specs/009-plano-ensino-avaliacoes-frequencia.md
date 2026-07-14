@@ -1,76 +1,83 @@
-# Spec 009 — Plano de ensino, avaliações futuras e frequência por disciplina
+# Spec 009 — Course Plan, Future Assessments, and Attendance by Discipline
 
-## 1. Objetivo
+> Canonical language: English
+> Translation: [../spec_traduzido/009-plano-ensino-avaliacoes-frequencia.md](../spec_traduzido/009-plano-ensino-avaliacoes-frequencia.md)
+> Status: implemented
+> Last reviewed: 2026-07-13
 
-Organizar a disciplina em visão geral, avaliações, frequência, plano de ensino e recomendações, permitindo importar um PDF de plano de ensino com revisão humana antes de persistir dados estruturados.
+> **Historical notice:** The in-memory persistence statement was superseded by Spec 012. Planning priority and session language was subsequently refined by Specs 014, 017, and 018.
 
-## 2. Escopo
+## 1. Goal
 
-- pré-visualizar e confirmar dados explicitamente presentes em plano de ensino;
-- armazenar dados estruturados confirmados, nunca o PDF bruto;
-- distinguir avaliações `planned`, `completed` e `cancelled`;
-- permitir avaliação futura sem nota e conclusão posterior com nota;
-- registrar faltas por ocorrência e ajuste acumulado;
-- usar avaliações futuras confirmadas como fator determinístico de prioridade no plano semanal;
-- preservar cadastro manual, SIGAA, simulação e recomendação existentes.
+Organize each discipline into overview, assessments, attendance, course plan, and recommendations, including import of a course-plan PDF with human review before structured data is persisted.
 
-OCR é somente fallback opcional para documento sem texto utilizável. Ausência de OCR deve retornar erro amigável.
+## 2. Scope
 
-## 3. Unidade acadêmica
+- preview and confirm data explicitly present in a course plan;
+- store confirmed structured data, never the raw PDF;
+- distinguish `planned`, `completed`, and `cancelled` assessments;
+- permit a future assessment without a grade and later completion with a grade;
+- record absences by occurrence and by cumulative adjustment;
+- use confirmed future assessments as a deterministic weekly-planning priority factor;
+- preserve existing manual entry, SIGAA, simulation, and recommendation flows.
 
-O sistema adota **hora-aula** como unidade da carga horária e das faltas porque o modelo existente já possui `total_class_hours` e `missed_class_hours`. `workload_hours` é interpretado como carga em horas-aula no produto.
+OCR is only an optional fallback for a document without usable text. Missing OCR support must produce a friendly error.
 
-Não converter hora-aula em hora-relógio, encontros ou créditos. Uma disciplina de 30 horas-aula admite exatamente `30 × 0,25 = 7,5` horas-aula de ausência. Valores decimais são preservados.
+## 3. Academic unit
 
-Carga semanal só é exibida quando `term_weeks` for explicitamente informado: `workload_hours / term_weeks`.
+The product uses **class-hour** (*hora-aula*) for workload and absence because the existing model contains `total_class_hours` and `missed_class_hours`. `workload_hours` is interpreted as class-hours.
 
-## 4. Plano de ensino
+Do not convert class-hours to clock hours, meetings, or credits. A 30-class-hour discipline allows exactly `30 × 0.25 = 7.5` class-hours of absence. Preserve decimal values.
 
-`POST /api/disciplines/{id}/course-plan/preview` recebe um PDF, valida tamanho/assinatura, extrai camada textual local e retorna prévia com TTL.
+Show weekly workload only when `term_weeks` is explicitly supplied: `workload_hours / term_weeks`.
 
-Campos possíveis: código, nome, semestre, carga horária, objetivos, conteúdos, cronograma, avaliações explícitas e bibliografia. Campos ausentes permanecem nulos ou vazios. Avaliação sem data ou peso suficiente recebe `requires_review`.
+## 4. Course plan
 
-`POST /api/disciplines/{id}/course-plan/confirm` revalida a prévia editada e persiste somente dados estruturados. `GET` consulta e `DELETE` remove os dados estruturados. Temporários são removidos em `finally`.
+`POST /api/disciplines/{id}/course-plan/preview` accepts a PDF, validates size/signature, extracts its local text layer, and returns a TTL-bound preview.
 
-## 5. Avaliações
+Possible fields are code, name, term, workload, goals, contents, schedule, explicit assessments, and bibliography. Missing fields remain null or empty. An assessment without sufficient date or weight receives `requires_review`.
 
-Cada avaliação contém nome, data, peso opcional, nota opcional, tópicos, observação, origem (`manual` ou `course_plan`) e status.
+`POST /api/disciplines/{id}/course-plan/confirm` revalidates the edited preview and persists structured data only. `GET` retrieves and `DELETE` removes structured data. Temporary files are removed in `finally`.
 
-- `planned`: nota deve ser vazia;
-- `completed`: nota é obrigatória;
-- `cancelled`: não participa da simulação;
-- somente avaliações com nota contribuem para a contribuição atual;
-- peso ausente gera informação incompleta;
-- soma diferente de 100% gera warning.
+## 5. Assessments
 
-Endpoints permitem listar, criar, atualizar, concluir e excluir.
+Each assessment has name, date, optional weight, optional grade, topics, notes, origin (`manual` or `course_plan`), and status.
 
-## 6. Frequência
+- `planned`: grade must be empty;
+- `completed`: grade is required;
+- `cancelled`: excluded from simulation;
+- only graded assessments contribute to current contribution;
+- a missing weight means information is incomplete;
+- a total other than 100% produces a warning.
 
-Ocorrência: data, quantidade positiva de horas-aula e observação opcional. Data + quantidade iguais não podem se repetir. Ajuste manual acumulado é alternativo às ocorrências e fica explicitamente identificado.
+Endpoints support list, create, update, complete, and delete.
 
-O resumo usa carga horária confirmada e soma das faltas: limite = carga × 25%; frequência = `1 - faltas / carga`; saldo = limite - faltas, sem arredondamento silencioso. Acima de 15% é atenção; acima de 25% é risco alto. Sem carga horária, o estado é desconhecido.
+## 6. Attendance
 
-## 7. Planejamento e IA
+An occurrence has date, a positive class-hour quantity, and optional notes. Identical date + quantity pairs cannot repeat. A manual cumulative adjustment is an explicit alternative to occurrences.
 
-Prioridade efetiva = prioridade informada mais bônus determinístico, limitada a 5:
+The summary uses confirmed workload and the absence sum: limit = workload × 25%; attendance = `1 - absences / workload`; balance = limit - absences, without silent rounding. Above 15% requires attention; above 25% is high risk. Without workload, status is unknown.
 
-- avaliação confirmada em até 7 dias: +2;
-- em 8 a 14 dias: +1;
-- demais casos: +0.
+## 7. Planning and AI
 
-Avaliações canceladas, concluídas, ambíguas ou sem data não influenciam. A regra não elimina a sessão mínima de outra disciplina quando há disponibilidade suficiente.
+Legacy effective priority equaled user priority plus a deterministic bonus, capped at 5:
 
-O LLM não altera sessões. Pode apenas explicar dados confirmados. Sem chave ou resposta válida, o plano e recomendações usam fallback determinístico.
+- confirmed assessment within 7 days: +2;
+- within 8–14 days: +1;
+- otherwise: +0.
 
-## 8. Privacidade e persistência
+Cancelled, completed, ambiguous, or undated assessments do not influence that legacy rule. It does not remove another discipline's minimum session when capacity is sufficient. Specs 014, 017, and 018 replace user-entered priority and rigid-session UX with backend priority, estimated study demand, capacity analysis, and confirmed planned blocks.
 
-O armazenamento continua em memória e é perdido ao reiniciar o backend. Não persistir PDF, texto integral, prompt ou resposta integral do LLM. Logs contêm apenas IDs, contagens, método e latência.
+An LLM never changes planned blocks. It may only explain confirmed data. Without a key or valid response, planning and recommendations use deterministic fallback.
 
-## 9. Interface
+## 8. Privacy and persistence
 
-A página da disciplina usa abas: Visão geral, Avaliações, Frequência, Plano de ensino e Recomendações. Formulários são abertos sob demanda. Dados temporários e confirmados têm estados distintos.
+The original slice used in-memory storage; Spec 012 replaced it with SQLAlchemy persistence. Still do not persist a raw PDF, full extracted text, full prompt, or full LLM response. Logs contain IDs, counts, mode, and latency only.
 
-## 10. Testes e aceite
+## 9. Frontend behavior
 
-Cobrir extração explícita, documento sem avaliação/texto, revisão, temporários, ciclo das avaliações, pesos incompletos, carga de 30 horas-aula, faltas CRUD, duplicação, unidade desconhecida, prioridade por proximidade, fallback e contratos. Validar os fluxos no Docker e navegador sem dados pessoais.
+The discipline page uses Overview, Assessments, Attendance, Course Plan, Contents, and Recommendations surfaces. Forms open on demand. Temporary and confirmed data have distinct states.
+
+## 10. Tests and acceptance criteria
+
+Cover explicit extraction, documents without assessments/text, review, temporary cleanup, assessment lifecycle, incomplete weights, the exact 30-class-hour limit, absence CRUD/duplication, unknown unit, deterministic deadline influence, fallback, and API contracts. Validate relevant Docker/browser flows without personal data.
