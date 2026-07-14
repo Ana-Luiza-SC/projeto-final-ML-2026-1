@@ -2,13 +2,9 @@
 
 EstudaUnB é um MVP para estudantes da Universidade de Brasília organizarem disciplinas, conteúdos, avaliações, faltas, calendário acadêmico e planejamento semanal de estudos. O projeto demonstra o ciclo agente → API → produto com guardrails, fallback determinístico e dados auditáveis.
 
-## Aplicação publicada
+## Relatório Final
 
-- Produto: https://name-estudaunb-frontend.onrender.com/
-- API real (Swagger): https://projeto-final-ml-2026-1.onrender.com/docs
-- Vídeo — usuário real utilizando a aplicação: https://drive.google.com/file/d/1cn-L3346V5woTb07Fe6MSc9xTr_eIgEq/view?usp=sharing
-
-Os dois endpoints responderam HTTP 200 na revisão de 2026-07-13. Serviços gratuitos do Render podem apresentar cold start no primeiro acesso.
+- Relatório final: [RELATORIO.md](RELATORIO.md)
 
 ## Produto
 
