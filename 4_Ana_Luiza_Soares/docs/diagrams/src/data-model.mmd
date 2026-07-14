@@ -1,0 +1,12 @@
+erDiagram
+  USER ||--o{ DISCIPLINE : owns
+  USER ||--o{ ACADEMIC_EVENT : owns
+  DISCIPLINE ||--o{ ASSESSMENT : has
+  DISCIPLINE ||--o{ ABSENCE : has
+  DISCIPLINE ||--o| COURSE_PLAN : has
+  DISCIPLINE ||--o{ CONTENT_NODE : organizes
+  CONTENT_NODE ||--o{ CONTENT_NODE : parent_of
+  ASSESSMENT }o--o{ CONTENT_NODE : selects
+  ASSESSMENT ||--o| ACADEMIC_EVENT : projects_to
+  CATALOG_COMPONENT ||--o{ DISCIPLINE : enriches
+  DISCIPLINE ||--o{ COMPLEXITY_ANALYSIS : has

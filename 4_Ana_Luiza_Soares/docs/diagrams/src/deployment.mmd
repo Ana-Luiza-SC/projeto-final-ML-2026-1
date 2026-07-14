@@ -1,0 +1,6 @@
+flowchart LR
+  Browser --> Static[Render Static Site]
+  Static --> Service[Render Web Service]
+  Service --> Neon[(Neon PostgreSQL)]
+  Service -. optional .-> Gemini[Gemini API]
+  Service -. public .-> SIGAA[SIGAA pages]

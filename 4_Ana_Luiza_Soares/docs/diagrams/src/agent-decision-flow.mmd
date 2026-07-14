@@ -1,0 +1,15 @@
+flowchart TD
+  Input[User input] --> Context[Owner-scoped context retrieval]
+  Context --> Facts[Deterministic facts]
+  Facts --> Guard[Guardrails]
+  Guard --> Try{LLM configured?}
+  Try -->|yes| LLM[LLM attempt]
+  Try -->|no| Fallback[Deterministic fallback]
+  LLM --> Valid{Structured output valid and evidenced?}
+  Valid -->|no| Fallback
+  Valid -->|yes| Response[Response and suggested actions]
+  Fallback --> Response
+  Response --> Confirm{Mutation?}
+  Confirm -->|yes| Human[Confirmation and revalidation]
+  Confirm -->|no| Done[Return]
+  Human --> Done

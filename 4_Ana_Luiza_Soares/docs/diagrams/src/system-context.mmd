@@ -1,0 +1,8 @@
+flowchart LR
+  Student[Student] --> FE[EstudaUnB web app]
+  FE --> API[EstudaUnB API]
+  API --> DB[(PostgreSQL / Neon)]
+  API -. optional .-> Gemini[Gemini API]
+  API -. public only .-> SIGAA[Public SIGAA pages]
+  Render[Render deployment] --- FE
+  Render --- API

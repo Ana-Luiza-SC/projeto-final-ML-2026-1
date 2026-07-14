@@ -1,0 +1,12 @@
+flowchart LR
+  Upload[PDF upload] --> Temp[Temporary bounded extraction]
+  Temp --> Smart{Intelligent extraction available?}
+  Smart -->|yes| Model[Structured extraction attempt]
+  Smart -->|no| Parser[Local parser fallback]
+  Model --> Schema{Schema and evidence valid?}
+  Schema -->|no| Parser
+  Schema -->|yes| Review[Human review]
+  Parser --> Review
+  Review --> Confirm{Confirm?}
+  Confirm -->|yes| Persist[Persist structured data only]
+  Confirm -->|no| Discard[Discard preview]

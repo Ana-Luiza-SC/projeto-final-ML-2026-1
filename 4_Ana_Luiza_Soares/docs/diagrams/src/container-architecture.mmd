@@ -1,0 +1,14 @@
+flowchart TB
+  FE[React + Vite SPA] --> API[FastAPI]
+  API --> Auth[Authentication]
+  API --> Academic[Discipline services and calculators]
+  API --> PDF[PDF extraction]
+  API --> SIGAA[Public SIGAA integration]
+  API --> Plan[Priority and weekly planning]
+  API --> Agent[Recommendation/contextual agent]
+  Agent --> KB[Study-method JSON]
+  Agent -. optional .-> Gemini
+  Agent --> Fallback[Deterministic fallback]
+  Auth --> DB[(Persistence)]
+  Academic --> DB
+  Plan --> DB

@@ -1,0 +1,9 @@
+flowchart LR
+  Search[Public component search] --> Session[JSF session and ViewState]
+  Session --> Select[Select semantic result]
+  Select --> Detail[Turma detail POST]
+  Detail --> Parse[Parse semantic fields]
+  Parse --> Store[Cache and catalog upsert]
+  Session -. failure .-> Fallback[Manual data preserved]
+  Detail -. failure .-> Fallback
+  Parse -. missing field .-> Fallback
