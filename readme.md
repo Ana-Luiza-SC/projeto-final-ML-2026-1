@@ -1,7 +1,5 @@
 # Projeto Final
 
-> Entrega EstudaUnB: [`4_Ana_Luiza_Soares/`](4_Ana_Luiza_Soares/README.md). Especificações canônicas: [`4_Ana_Luiza_Soares/specs/`](4_Ana_Luiza_Soares/specs/README.md). Relatório público em elaboração: [`4_Ana_Luiza_Soares/docs/report/`](4_Ana_Luiza_Soares/docs/report/README.md).
-
 Este é o projeto que fecha a disciplina. Ao longo do semestre, os projetos individuais cobriram as fatias centrais do ciclo de um sistema com agentes de IA, concepção e arquitetura de agentes, rastreamento de experimentos, automação com n8n e construção auditável; aqui você vai juntar tudo em um único trabalho, do começo ao fim: escolher um problema real, construir um agente de IA que o resolva, expô-lo como API e integrá-lo a um produto.
 
 Você trabalhará individual ou em equipe (até 5 pessoas). Como o prazo é de 3 semanas, a regra de ouro é pense pequeno e completo, não grande e pela metade: é melhor um sistema simples que funciona de ponta a ponta do que uma ideia ambiciosa.
