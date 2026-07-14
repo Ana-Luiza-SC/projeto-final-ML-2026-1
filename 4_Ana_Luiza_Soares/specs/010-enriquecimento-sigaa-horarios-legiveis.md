@@ -1,60 +1,58 @@
-# Spec 010 — Enriquecimento SIGAA e horários legíveis
+# Spec 010 — SIGAA Enrichment and Readable Schedules
 
-## Problema e causa-raiz
+> Canonical language: English
+> Translation: [../spec_traduzido/010-enriquecimento-sigaa-horarios-legiveis.md](../spec_traduzido/010-enriquecimento-sigaa-horarios-legiveis.md)
+> Status: implemented
+> Last reviewed: 2026-07-13
 
-A busca pública do SIGAA encontra a linha do componente, mas não enriquece o resultado com a página de detalhe. A causa confirmada está em `sigaa_components.py`: `_extract_component_values_from_row` escolhe o primeiro link não vazio da linha e `parse_component_results` entrega o próprio HTML da listagem a `parse_sigaa_component_details`; nenhuma requisição do detalhe ocorre. O cache persiste esse resultado vazio sem versão, TTL ou indicador de enriquecimento.
+## Problem and root cause
 
-Na importação do atestado, `extract_candidates_from_table` reconhece somente a tabela principal e descarta a tabela semanal. O contrato preserva apenas `schedule_code`, que o frontend apresenta diretamente como horário principal.
+The public SIGAA search originally found the component row but did not enrich it from its detail page. The confirmed cause in `sigaa_components.py` was that `_extract_component_values_from_row` selected the first non-empty row link and `parse_component_results` passed listing HTML to `parse_sigaa_component_details`; no detail request occurred. The cache stored this empty result without version, TTL, or enrichment marker.
 
-## Fluxo proposto
+For enrollment receipt import, `extract_candidates_from_table` recognized only the main table and discarded the weekly schedule table. The contract retained only `schedule_code`, displayed as the primary schedule.
 
-1. O parser puro da listagem extrai código, nome, tipo, unidade, carga disponível e a URL semântica do detalhe.
-2. A infraestrutura usa a mesma `requests.Session`, resolve URL relativa, envia `Referer`, aplica timeout e segue apenas redirecionamentos que permaneçam na área pública do SIGAA.
-3. O parser puro de detalhes reconhece ementa/descrição, programa e cargas teórica, prática e total.
-4. Falha no detalhe preserva os dados básicos e acrescenta aviso de revisão/cadastro manual.
-5. Cache versionado e com TTL ignora registros antigos ou componentes cujo detalhe não foi processado.
-6. O importador interpreta a tabela semanal antes do fallback de código compacto. Slots explícitos prevalecem, são agrupados e conflitos geram warning.
-7. O frontend mostra `schedule_display`; o código bruto fica secundário e editável para auditoria.
+## Flow
 
-## Contratos de dados
+1. A pure listing parser extracts code, name, type, unit, available workload, and the semantically selected detail URL.
+2. Infrastructure reuses the same `requests.Session`, resolves relative URLs, sends `Referer`, applies a timeout, and follows redirects only within public SIGAA paths.
+3. A pure detail parser recognizes syllabus/description, program, and theoretical, practical, and total workload.
+4. Detail failure preserves basic fields and adds a manual-review warning.
+5. A versioned TTL cache ignores legacy/incomplete entries.
+6. Enrollment import interprets the weekly table before compact-code fallback. Explicit slots prevail; consecutive slots are grouped and conflicts produce warnings.
+7. The frontend presents `schedule_display`; the raw code remains secondary and editable for audit.
 
-`SigaaComponent` mantém os campos existentes e acrescenta `details_processed`, além das cargas teórica e prática opcionais. A resposta continua retrocompatível.
+## Data contracts
 
-Disciplina e itens de prévia mantêm `schedule_code` e acrescentam:
+`SigaaComponent` retains existing fields and adds `details_processed` and optional theoretical/practical workloads. The response remains backward compatible.
 
-- `schedule_slots`: lista de `{day, start_time, end_time, source}`;
-- `schedule_display`: texto em português;
-- `schedule_source`: `receipt_table`, `sigaa_tooltip`, `decoded_code` ou `unresolved`.
+Discipline and preview items retain `schedule_code` and add:
 
-Dados antigos sem os campos novos continuam válidos. Confirmação aceita correção manual da representação estruturada.
+- `schedule_slots`: `{day, start_time, end_time, source}` entries;
+- `schedule_display`: Portuguese user-facing text;
+- `schedule_source`: `receipt_table`, `sigaa_tooltip`, `decoded_code`, or `unresolved`.
 
-## Guardrails e fallback
+Older data without these fields remains valid. Confirmation accepts manual correction of the structured representation.
 
-- somente host e caminhos públicos do SIGAA; login, autenticação e redirecionamentos privados são rejeitados;
-- sem credenciais, scraping em lote ou invenção de ementa/horário;
-- timeout e erro do detalhe não eliminam código/nome;
-- tabela explícita prevalece sobre código; conflito é avisado;
-- código desconhecido permanece auditável, com `schedule_source=unresolved` e aviso;
-- PDF bruto, texto integral e dados pessoais não são armazenados nem registrados;
-- cadastro e correção manual permanecem disponíveis.
+## Guardrails and fallback
 
-## Critérios de aceitação
+- allow only public SIGAA host/paths; reject login, authentication, and private redirects;
+- no credentials, bulk scraping, or invented syllabus/schedule;
+- timeout/detail error never removes code/name;
+- explicit table data prevails over code; report conflicts;
+- preserve unknown codes with `schedule_source=unresolved` and a warning;
+- never store/log raw PDF, full text, or personal data;
+- preserve manual entry/correction.
 
-- detalhe público realmente requisitado na mesma sessão e ementa real renderizável;
-- link selecionado pela semântica do nome/ação de detalhes, não pela posição;
-- falha do detalhe preserva dados básicos sem inventar campos;
-- cache antigo/incompleto não mascara nova busca;
-- tabela semanal e códigos conhecidos geram horários explícitos em português;
-- código bruto não é apresentação primária;
-- contratos antigos permanecem aceitos e todas as validações passam.
+## Acceptance criteria
 
-## Estratégia de testes
+- request the actual public detail in the same session and render a real syllabus when present;
+- choose the link by name/detail-action semantics, not position;
+- preserve basic fields on detail failure without invention;
+- do not let old/incomplete cache hide a new lookup;
+- convert weekly tables and known codes to explicit readable Portuguese schedules;
+- do not use raw code as primary presentation;
+- accept legacy contracts and pass validations.
 
-Fixtures HTML sanitizadas cobrem listagem, detalhe, `Ementa/Descrição`, detalhe sem ementa, mudança moderada e redirecionamento a login. Testes unitários não usam rede e verificam parser puro, mesma sessão, headers, cache, fallback e ausência de invenção. Fixtures de tabelas cobrem horários explícitos, agrupamento, múltiplos dias/turnos, código desconhecido, ausência e conflito. O frontend é validado por função de apresentação e build TypeScript.
+## Test strategy and impact
 
-## Impacto
-
-- **Backend:** parser/infraestrutura SIGAA separados; normalizador determinístico de horários; schemas e importação retrocompatíveis.
-- **Frontend:** apresentação legível em listagem, detalhe e revisão, mantendo código bruto como campo secundário editável.
-- **Cache:** envelope com versão, criação, expiração e completude; registros legados ou incompletos são ignorados.
-- **Auditoria:** o código bruto permanece como informação secundária, nunca como horário principal.
+Sanitized fixtures cover listing, detail, `Ementa/Descrição`, missing syllabus, moderate HTML changes, and login redirect. Unit tests avoid the network and check pure parsing, session/headers, cache, fallback, and no invention. Schedule fixtures cover explicit slots, grouping, multiple days/shifts, unknown/missing codes, and conflicts. Backend parser/infrastructure, frontend presentation, cache envelope, and audit display are affected.

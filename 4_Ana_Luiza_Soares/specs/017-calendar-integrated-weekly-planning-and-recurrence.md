@@ -1,5 +1,12 @@
 # Spec 017 - Calendar-Integrated Weekly Planning and Recurrence
 
+> Canonical language: English
+> Translation: [../spec_traduzido/017-calendar-integrated-weekly-planning-and-recurrence.md](../spec_traduzido/017-calendar-integrated-weekly-planning-and-recurrence.md)
+> Status: implemented
+> Last reviewed: 2026-07-13
+
+> **Relationship notice:** Spec 018 refines the frontend information architecture and planning explanations while preserving this specification's planned-block, recurrence, confirmation, and calendar contracts.
+
 ## Problem Statement
 
 The current weekly planning and calendar experience mixes three different concepts:
@@ -554,4 +561,3 @@ Frontend tests:
 20. User data remains isolated.
 21. The application works without the LLM.
 22. No raw technical error is exposed.
-
